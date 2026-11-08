@@ -43,6 +43,58 @@ const PRESET_TABLES = {
   }
 };
 
+// ---- symmetric passing beam (R149 Classes CS, DS, ES; values as R113 01 series) ----
+function symLowTable(cls) {
+  const k = { CS: 0, DS: 1, ES: 2 }[cls];
+  const pick = a => a[k];
+  return [
+    { id: "1 (3.5R)", h: 3.5, v: -0.86, min: pick([2000, 2000, 2500]), max: 13750 },
+    { id: "2 (V)", h: 0, v: -0.86, min: pick([2450, 4900, 4900]) },
+    { id: "3 (3.5L)", h: -3.5, v: -0.86, min: pick([2000, 2000, 2500]), max: 13750 },
+    { id: "4L", h: -1.5, v: 0.5, max: 900 },
+    { id: "4R", h: 1.5, v: 0.5, max: 900 },
+    { id: "5L", h: -15, v: -2, min: pick([550, 1100, 1100]) },
+    { id: "5R", h: 15, v: -2, min: pick([550, 1100, 1100]) },
+    { id: "6L", h: -20, v: -4, min: pick([150, 300, 600]) },
+    { id: "6R", h: 20, v: -4, min: pick([150, 300, 600]) },
+    { id: "7 (HV)", h: 0, v: 0, max: 1700 },
+    { id: "Line 1", line: [[-9, -2], [9, -2]], min: pick([1350, 1350, 1900]) },
+    { id: "8", h: -8, v: 4, max: 700 },
+    { id: "9", h: 0, v: 4, max: 700 },
+    { id: "10", h: 8, v: 4, max: 700 },
+    { id: "11", h: -4, v: 2, max: 900 },
+    { id: "12", h: 0, v: 2, max: 900 },
+    { id: "13", h: 4, v: 2, max: 900 },
+    { id: "14L", h: -8, v: 0, min: 50 },
+    { id: "14R", h: 8, v: 0, min: 50 },
+    { id: "15L", h: -4, v: 0, min: 100, max: 900 },
+    { id: "15R", h: 4, v: 0, min: 100, max: 900 },
+    { id: "Zone 1", zone: [[-8, 1], [-8, 4], [8, 4], [8, 1], [4, 0], [1, 0], [0, 0.6], [-1, 0], [-4, 0]], max: 900 },
+    { id: "Zone 2", zone: [[-8, 4.01], [8, 4.01], [8, 14.99], [-8, 14.99]], max: 700 }
+  ];
+}
+function symHighTable(cls) {
+  const T = {
+    BS: { imax: 20000, hv: 16000, h25: 9000, h5: 2500 },
+    CS: { imax: 25000, hv: 20000, h25: 10000, h5: 3500, h9: 2000, h12: 600, u2: 1000 },
+    DSES: { imax: 40000, hv: 30000, h25: 20000, h5: 5000, h9: 3400, h12: 1000, u2: 1700 }
+  }[cls];
+  const t = [
+    { id: "Imax", imax: true, min: T.imax, max: 215000 },
+    { id: "H-V", h: 0, v: 0, min: T.hv },
+    { id: "H-2.5L", h: -2.5, v: 0, min: T.h25 }, { id: "H-2.5R", h: 2.5, v: 0, min: T.h25 },
+    { id: "H-5L", h: -5, v: 0, min: T.h5 }, { id: "H-5R", h: 5, v: 0, min: T.h5 }
+  ];
+  if (T.h9) t.push({ id: "H-9L", h: -9, v: 0, min: T.h9 }, { id: "H-9R", h: 9, v: 0, min: T.h9 },
+    { id: "H-12L", h: -12, v: 0, min: T.h12 }, { id: "H-12R", h: 12, v: 0, min: T.h12 }, { id: "2U-V", h: 0, v: 2, min: T.u2 });
+  return t;
+}
+const SYM_NOTE = "Symmetric classes for L and T category vehicles. Values in cd as in R113 01 series, carried into R149. Check against the series you certify to and edit as needed.";
+["CS", "DS", "ES"].forEach(c => { PRESET_TABLES["low_" + c] = { name: `ECE R149 Class ${c} passing beam (symmetric)`, note: SYM_NOTE, points: symLowTable(c) }; });
+PRESET_TABLES.high_BS = { name: "ECE R149 Class BS driving beam", note: SYM_NOTE + " Primary driving beam; HV need not lie in the 80 % isocandela.", points: symHighTable("BS") };
+PRESET_TABLES.high_CS = { name: "ECE R149 Class CS driving beam", note: SYM_NOTE + " Primary driving beam; HV need not lie in the 80 % isocandela.", points: symHighTable("CS") };
+PRESET_TABLES.high_DSES = { name: "ECE R149 Class DS / ES driving beam", note: SYM_NOTE + " Primary driving beam; HV need not lie in the 80 % isocandela.", points: symHighTable("DSES") };
+
 const PRESET_ROAD = {
   low: {
     function: "low", traffic: "RHT",
@@ -97,6 +149,7 @@ function encodeVal(b, x) {
 
 function decode(u, beam, cut) {
   const B = BOUNDS[beam], x = u.map((ui, i) => decodeVal(B[i], ui));
+  if (cut && cut.sym) { x[1] = 0; x[6] = 0; }   // symmetric passing beam: lobes centred on V-V
   return {
     beam, cut,
     comps: [
@@ -206,6 +259,11 @@ function compileTable(table, beam, cut) {
           if (pointInPoly(h, v, e.zone) || e.zone.some(p => Math.abs(p[0] - h) < 1e-6 && Math.abs(p[1] - v) < 1e-6)) pts.push([h, v, maskAt(P0, h, v)]);
       e.zone.forEach(p => pts.push([p[0], p[1], maskAt(P0, p[0], p[1])]));
       c.samples = pts;
+    } else if (e.line) {
+      const [[h1, v1], [h2, v2]] = e.line, n = Math.max(1, Math.ceil(Math.hypot(h2 - h1, v2 - v1) / 0.25));
+      c.samples = [];
+      for (let k = 0; k <= n; k++) { const h = h1 + (h2 - h1) * k / n, v = v1 + (v2 - v1) * k / n; c.samples.push([h, v, maskAt(P0, h, v)]); }
+      c.zone = null; c.isLine = true;
     } else if (e.h != null) c.m = maskAt(P0, e.h, e.v);
     return c;
   });
@@ -340,13 +398,13 @@ function evaluate(P, ctx, detail) {
   let cost = 0;
   const vals = {}, rows = [];
   for (const e of ctx.table) {
-    if (e.h != null && !e.zone) vals[e.id] = evalM(P, e.h, e.v, e.m);
+    if (e.h != null && !e.zone && !e.isLine) vals[e.id] = evalM(P, e.h, e.v, e.m);
     else if (e.imax) vals[e.id] = imax;
   }
   for (const e of ctx.table) {
     let val, min = e.min, max = e.max, kind = "pt";
-    if (e.zone) {
-      kind = "zone";
+    if (e.zone || e.isLine) {
+      kind = e.isLine ? "line" : "zone";
       let lo = Infinity, hi = -Infinity;
       for (const s of e.samples) { const x = evalM(P, s[0], s[1], s[2]); if (x < lo) lo = x; if (x > hi) hi = x; }
       if (e.maxRef) max = e.maxRef.k * (vals[e.maxRef.id] || 0);
@@ -355,7 +413,7 @@ function evaluate(P, ctx, detail) {
       if (min != null && max != null) { cost += penalty(lo, min, null, margin) + penalty(hi, null, max, margin); if (detail) rows.push(row(e, kind, lo, min, null), row(e, kind, hi, null, max)); continue; }
     } else if (e.sum) { kind = "sum"; val = e.sum.reduce((a, id) => a + (vals[id] || 0), 0); vals[e.id] = val; }
     else val = vals[e.id];
-    if (e.maxRef && !e.zone) max = e.maxRef.k * (vals[e.maxRef.id] || 0);
+    if (e.maxRef && !e.zone && !e.isLine) max = e.maxRef.k * (vals[e.maxRef.id] || 0);
     if (e.minRatioImax) min = e.minRatioImax * imax;
     if (e.info) { if (detail) rows.push(row(e, kind, val, null, null)); continue; }
     cost += penalty(val, min, max, margin);
@@ -399,10 +457,10 @@ function buildContext(o) {
 function initPhysical(beam, t, cut) {
   const I = t.imax || (beam === "low" ? 30000 : 90000), S = t.spreadH || (beam === "low" ? 14 : 12), V = t.spreadV || (beam === "low" ? 4 : 6);
   if (beam === "low") {
-    const e = cut ? cut.elbow : -0.57;
+    const e = cut ? cut.elbow : -0.57, sym = cut && cut.sym;
     return { comps: [
-      { A: I * 1.15, h: 1.5, v: e - 0.55, sh: Math.max(1.5, S / 4.5), sv: Math.min(2.5, Math.max(0.4, V / 5)) },
-      { A: 0.35 * I, h: 0.5, v: e - 0.75, sh: S / 1.97, sv: Math.max(0.8, V / 3) },
+      { A: I * 1.15, h: sym ? 0 : 1.5, v: e - 0.55, sh: Math.max(1.5, S / 4.5), sv: Math.min(2.5, Math.max(0.4, V / 5)) },
+      { A: 0.35 * I, h: sym ? 0 : 0.5, v: e - 0.75, sh: S / 1.97, sv: Math.max(0.8, V / 3) },
       { A: 0.06 * I, h: 0, v: -4, sh: S * 1.6, sv: 3 }], sigA: 220 };
   }
   return { comps: [

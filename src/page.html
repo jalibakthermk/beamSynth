@@ -47,6 +47,7 @@ label.f small{font-size:11.5px;color:var(--muted);opacity:.85}
 input,select,textarea{font:14px var(--f-body);color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:7px 8px;width:100%;min-width:0}
 input[type=number]{font-family:var(--f-mono);font-size:13.5px}
 textarea{font:12px/1.45 var(--f-mono);resize:vertical;white-space:pre;overflow:auto;tab-size:2}
+input:disabled{opacity:.55}
 input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .btnrow{display:flex;flex-wrap:wrap;gap:6px}
 .btn{font:600 13px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:6px 10px;cursor:pointer}
@@ -98,6 +99,8 @@ tr.fail td{background:color-mix(in srgb,var(--fail) 6%,transparent)}
 .export{padding:12px;display:flex;flex-direction:column;gap:10px}
 .export textarea{height:150px}
 footer{color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding-top:10px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px}
+footer a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+footer a:hover{color:var(--ink)}
 @media (prefers-reduced-motion:reduce){.prog i{transition:none}}
 </style>
 
@@ -135,9 +138,12 @@ footer{color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padd
 
   <fieldset id="paramPanel">
     <p class="lab">Beam parameters</p>
-    <label class="f">Beam function
-      <select id="fn"><option value="low">Low beam (passing)</option><option value="high">High beam (driving)</option></select>
-    </label>
+    <div class="row2">
+      <label class="f">Beam function
+        <select id="fn"><option value="low">Low beam</option><option value="high">High beam</option></select>
+      </label>
+      <label class="f">Class (R149)<select id="cls"></select></label>
+    </div>
     <div class="row2">
       <label class="f">Maximum intensity (cd)<input id="imax" type="number" step="500" value="30000"></label>
       <label class="f">Luminous flux (lm)<input id="flux" type="number" step="10" value="800"></label>
@@ -155,7 +161,7 @@ footer{color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padd
       <button class="btn" id="exLow">Low-beam example</button>
       <button class="btn" id="exHigh">High-beam example</button>
     </div>
-    <p class="note">Paste a road-illuminate requirement set as is, or wrap it as <code>"checks"</code> with vehicle settings. Check types: <code>point</code>, <code>range</code>, <code>width</code>, <code>zone</code>, with <code>op</code> and <code>limit</code>; <code>y</code> is positive to the left, as in road-illuminate. Optional <code>z</code> per check sets its evaluation height. Optional <code>targets</code>: <code>imax</code>, <code>flux_lm</code>, <code>spreadH_deg</code>, <code>spreadV_deg</code>.</p>
+    <p class="note">Paste a road-illuminate requirement set as is, or wrap it as <code>"checks"</code> with vehicle settings. Check types: <code>point</code>, <code>range</code>, <code>width</code>, <code>zone</code>, with <code>op</code> and <code>limit</code>; <code>y</code> is positive to the left, as in road-illuminate. Optional <code>z</code> per check sets its evaluation height. Optional <code>class</code> (<code>B</code>, <code>CS</code>, <code>DS</code>, <code>ES</code>; driving beam <code>BS</code>, <code>DSES</code>). Optional <code>targets</code>: <code>imax</code>, <code>flux_lm</code>, <code>spreadH_deg</code>, <code>spreadV_deg</code>.</p>
   </fieldset>
 
   <fieldset>
@@ -181,7 +187,7 @@ footer{color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padd
         <label class="f">Shoulder top V (°)<input id="cCap" type="number" step="0.05" value="0.5"></label>
         <label class="f">Gradient width (°)<input id="cSharp" type="number" step="0.01" value="0.08"></label>
       </div>
-      <p class="note">Elbow on the V-V line. Gradient width sets cut-off sharpness (logistic scale).</p>
+      <p class="note">Elbow on the V-V line. Gradient width sets cut-off sharpness (logistic scale). Symmetric classes use a flat cut-off, so shoulder angle and top are fixed.</p>
     </div>
   </details>
 
@@ -248,7 +254,7 @@ footer{color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padd
 
 <footer>
   <span>Synthetic intensity model: three Gaussian lobes, logistic cut-off and a glare-floor term, fitted with an evolution-strategy solver.</span>
-  <span>© 2026 Jalib Akther</span>
+  <span>© 2026 Jalib Akther · Released under the <a href="https://github.com/jalibakthermk/beamSynth/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a></span>
 </footer>
 </div>
 

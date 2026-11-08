@@ -7,23 +7,45 @@ const angH = h => Math.abs(h) < 0.005 ? "0" : fmt(Math.abs(h), 2) + (h > 0 ? "R"
 const angV = v => Math.abs(v) < 0.005 ? "H" : fmt(Math.abs(v), 2) + (v > 0 ? "U" : "D");
 
 // ---------- presets ----------
-function tableText(beam) { return JSON.stringify(PRESET_TABLES[beam].points, null, 1).replace(/\n\s+(-?[\d.]+),?\n\s+(-?[\d.]+)\n\s+\]/g, (m, a, b) => ` ${a}, ${b}]`); }
 function compactJSON(o) {
   return JSON.stringify(o, null, 2).replace(/\{\n\s+([^{}\[\]]*?)\n\s+\}/g, (m, body) => "{ " + body.split(/,\n\s+/).join(", ") + " }")
     .replace(/\[\n\s+(-?[\d.]+),\n\s+(-?[\d.]+)\n\s+\]/g, "[$1, $2]");
 }
-S.tables.low = compactJSON(PRESET_TABLES.low.points);
-S.tables.high = compactJSON(PRESET_TABLES.high.points);
+// classes per beam function; key = PRESET_TABLES entry
+const CLASSES = {
+  low: [["B", "B — asymmetric", "low"], ["CS", "CS — symmetric", "low_CS"], ["DS", "DS — symmetric", "low_DS"], ["ES", "ES — symmetric", "low_ES"]],
+  high: [["B", "With Class B (asym.)", "high"], ["BS", "BS — symmetric", "high_BS"], ["CS", "CS — symmetric", "high_CS"], ["DSES", "DS / ES — symmetric", "high_DSES"]]
+};
+const tableKey = () => (CLASSES[S.beam].find(c => c[0] === $("cls").value) || CLASSES[S.beam][0])[2];
+const isSym = () => S.beam === "low" && $("cls").value !== "B";
+function tableFor(key) { if (S.tables[key] == null) S.tables[key] = compactJSON(PRESET_TABLES[key].points); return S.tables[key]; }
+function fillClasses(keep) {
+  const prev = keep || $("cls").value;
+  $("cls").innerHTML = CLASSES[S.beam].map(c => `<option value="${c[0]}">${c[1]}</option>`).join("");
+  if (CLASSES[S.beam].some(c => c[0] === prev)) $("cls").value = prev;
+}
+function syncCut() {
+  const sym = isSym();
+  if (sym) { $("cAngle").value = 0; $("cCap").value = $("cElbow").value; }
+  else if (+$("cAngle").value === 0) { $("cAngle").value = 15; $("cCap").value = 0.5; }
+  $("cAngle").disabled = sym; $("cCap").disabled = sym;
+}
 $("roadJson").value = compactJSON(PRESET_ROAD.low);
 
-function showTable() { $("tableJson").value = S.tables[S.beam]; $("tableNote").textContent = PRESET_TABLES[S.beam].name + ". " + PRESET_TABLES[S.beam].note; $("cutBox").hidden = S.beam !== "low"; }
-$("tableJson").addEventListener("input", () => { S.tables[S.beam] = $("tableJson").value; });
-$("tableReset").onclick = () => { S.tables[S.beam] = compactJSON(PRESET_TABLES[S.beam].points); showTable(); };
+function showTable() { const k = tableKey(); $("tableJson").value = tableFor(k); $("tableNote").textContent = PRESET_TABLES[k].name + ". " + PRESET_TABLES[k].note; $("cutBox").hidden = S.beam !== "low"; }
+$("tableJson").addEventListener("input", () => { S.tables[tableKey()] = $("tableJson").value; });
+$("tableReset").onclick = () => { const k = tableKey(); S.tables[k] = compactJSON(PRESET_TABLES[k].points); showTable(); };
 
-const PARAM_DEFAULTS = { low: { imax: 30000, flux: 800, sph: 14, spv: 4 }, high: { imax: 90000, flux: 1200, sph: 12, spv: 6 } };
+const PARAM_DEFAULTS = { low: { imax: 30000, flux: 800, sph: 14, spv: 4 }, low_sym: { imax: 18000, flux: 700, sph: 16, spv: 4 },
+  high: { imax: 90000, flux: 1200, sph: 12, spv: 6 }, high_sym: { imax: 60000, flux: 800, sph: 12, spv: 6 } };
+function setDefaults() {
+  const d = PARAM_DEFAULTS[S.beam + ($("cls").value === "B" ? "" : "_sym")];
+  $("imax").value = d.imax; $("flux").value = d.flux; $("sph").value = d.sph; $("spv").value = d.spv;
+}
 $("fn").onchange = () => {
-  S.beam = $("fn").value; const d = PARAM_DEFAULTS[S.beam];
-  $("imax").value = d.imax; $("flux").value = d.flux; $("sph").value = d.sph; $("spv").value = d.spv; showTable();
+  S.beam = $("fn").value; fillClasses(); setDefaults(); syncCut(); showTable();
+};
+$("cls").onchange = () => { setDefaults(); syncCut(); showTable();
 };
 $("exLow").onclick = () => { $("roadJson").value = compactJSON(PRESET_ROAD.low); };
 $("exHigh").onclick = () => { $("roadJson").value = compactJSON(PRESET_ROAD.high); };
@@ -42,7 +64,8 @@ function gather() {
   let road = null;
   try { road = JSON.parse($("roadJson").value); } catch (e) { if (S.mode === "road") throw new Error("Road JSON: " + e.message); }
   if (S.mode === "road" && road) {
-    if (road.function === "low" || road.function === "high") { $("fn").value = road.function; S.beam = road.function; showTable(); }
+    if (road.function === "low" || road.function === "high") { $("fn").value = road.function; S.beam = road.function; fillClasses(road.class); syncCut(); showTable(); }
+    else if (road.class) { fillClasses(road.class); syncCut(); showTable(); }
     if (road.traffic === "RHT" || road.traffic === "LHT") $("traffic").value = road.traffic;
     if (road.mounting) { if (road.mounting.height_m) $("mh").value = road.mounting.height_m; if (road.mounting.spacing_m) $("sp").value = road.mounting.spacing_m; }
     if (road.plane === "vertical" || road.plane === "horizontal") $("plane").value = road.plane;
@@ -50,8 +73,10 @@ function gather() {
   }
   S.beam = $("fn").value;
   let table;
-  try { table = JSON.parse(S.tables[S.beam]); if (!Array.isArray(table)) throw new Error("expected an array"); } catch (e) { throw new Error("Test table: " + e.message); }
-  const cut = { elbow: num("cElbow") ?? -0.57, angle: num("cAngle") ?? 15, cap: num("cCap") ?? 0.5, sharp: Math.max(0.02, num("cSharp") ?? 0.08) };
+  try { table = JSON.parse(tableFor(tableKey())); if (!Array.isArray(table)) throw new Error("expected an array"); } catch (e) { throw new Error("Test table: " + e.message); }
+  const sym = isSym(), elbow = num("cElbow") ?? -0.57;
+  const cut = sym ? { elbow, angle: 0, cap: elbow, sharp: Math.max(0.02, num("cSharp") ?? 0.08), sym: true }
+    : { elbow, angle: num("cAngle") ?? 15, cap: num("cCap") ?? 0.5, sharp: Math.max(0.02, num("cSharp") ?? 0.08) };
   const lht = $("traffic").value === "LHT";
   const H = num("mh") || 0.65, sp = num("sp") || 1.4;
   const isSet = Array.isArray(road);                       // bare road-illuminate requirement set
@@ -69,7 +94,7 @@ function gather() {
   }
   const lane = (road && !isSet && road.road && road.road.laneWidth_m) || 3.5;
   const evalH = Math.max(0, num("evalH") || 0);
-  return { beam: S.beam, cut, table, lht, H, sp, checks, evalH, targets, lane, mode: S.mode };
+  return { beam: S.beam, cls: $("cls").value, key: tableKey(), sym, cut, table, lht, H, sp, checks, evalH, targets, lane, mode: S.mode };
 }
 
 function generate() {
@@ -205,6 +230,12 @@ function drawIso() {
     const pass = css("--pass"), fail = css("--fail");
     const status = {}; S.res.rows.forEach(r => { if (status[r.id] !== false) status[r.id] = r.pass; });
     S.cfg.table.forEach(e => {
+      if (e.line) {
+        g.beginPath(); g.moveTo(X(mir * e.line[0][0]), Y(e.line[0][1])); g.lineTo(X(mir * e.line[1][0]), Y(e.line[1][1]));
+        g.strokeStyle = status[e.id] === false ? fail : "rgba(255,255,255,.55)"; g.setLineDash([2, 3]); g.lineWidth = 1.4; g.stroke(); g.setLineDash([]); g.lineWidth = 1;
+        g.fillStyle = "rgba(255,255,255,.7)"; g.textAlign = "left"; g.font = "10px " + css("--f-mono");
+        g.fillText(e.id, X(mir * Math.max(e.line[0][0], e.line[1][0])) + 4, Y(e.line[1][1]) + 3);
+      }
       if (e.zone) {
         g.beginPath(); e.zone.forEach((p, i) => i ? g.lineTo(X(mir * p[0]), Y(p[1])) : g.moveTo(X(mir * p[0]), Y(p[1]))); g.closePath();
         g.strokeStyle = status[e.id] === false ? fail : "rgba(255,255,255,.35)"; g.setLineDash([2, 3]); g.stroke(); g.setLineDash([]);
@@ -213,7 +244,7 @@ function drawIso() {
       }
     });
     S.cfg.table.forEach(e => {
-      if (e.h == null || e.zone) return;
+      if (e.h == null || e.zone || e.line) return;
       const st = status[e.id], x = X(mir * e.h), y = Y(e.v);
       g.beginPath(); g.arc(x, y, 3.5, 0, 7);
       g.fillStyle = st === false ? fail : st === true ? pass : "#9fb0bd"; g.fill(); g.strokeStyle = "#0d151d"; g.lineWidth = 1; g.stroke();
@@ -320,7 +351,7 @@ function renderSummary() {
   const mir = c.lht ? -1 : 1;
   const r1 = reach(1), r3 = reach(3);
   $("summary").innerHTML =
-    kv("ECE verdict", nf ? `${nf} of ${n} fail` : `PASS ${n}/${n}`, c.beam === "low" ? "passing beam" : "driving beam", "verdict " + (nf ? "bad" : "ok")) +
+    kv("ECE verdict", nf ? `${nf} of ${n} fail` : `PASS ${n}/${n}`, `Class ${c.cls === "DSES" ? "DS / ES" : c.cls} ${c.beam === "low" ? "passing" : "driving"} beam`, "verdict " + (nf ? "bad" : "ok")) +
     kv("Road checks", nrt ? (nr ? `${nr} of ${nrt} missed` : `met ${nrt}/${nrt}`) : "none", c.mode === "road" ? "solved for" : "checked only", "verdict " + (nr ? "bad" : "ok")) +
     kv("Imax", fmt(r.imax) + " cd", asked(t.imax, 0, " cd")) +
     kv("Flux", fmt(r.flux) + " lm", asked(t.flux, 0, " lm")) +
@@ -333,10 +364,10 @@ function renderSummary() {
 
 function renderTables() {
   const mir = S.cfg.lht ? -1 : 1;
-  $("tblName").textContent = PRESET_TABLES[S.cfg.beam].name;
+  $("tblName").textContent = PRESET_TABLES[S.cfg.key].name;
   $("ecTbl").innerHTML = "<thead><tr><th>Point</th><th>Position</th><th>Requirement (cd)</th><th>Value (cd)</th><th>Margin</th><th></th></tr></thead><tbody>" +
     S.res.rows.map(r => {
-      const pos = r.zone ? "zone " + (r.min != null ? "min" : "max") : r.kind === "sum" ? "sum" : r.h != null ? `${angH(mir * r.h)} ${angV(r.v)}` : "global";
+      const pos = r.kind === "line" ? "line " + (r.min != null ? "min" : "max") : r.zone ? "zone " + (r.min != null ? "min" : "max") : r.kind === "sum" ? "sum" : r.h != null ? `${angH(mir * r.h)} ${angV(r.v)}` : "global";
       return `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>${pos}</td><td class="n">${req(r)}</td><td class="n">${fmtCd(r.val)}</td><td class="n">${r.margin == null ? "" : fmt(100 * r.margin, 0) + " %"}</td><td>${pill(r.pass)}</td></tr>`;
     }).join("") + "</tbody>";
   $("roadMode").textContent = S.cfg.mode === "road" ? "solved for, lamp pair" : (S.res.roadRows.length ? "checked, not solved for" : "");
@@ -378,7 +409,7 @@ function buildIES() {
     "IESNA:LM-63-2002",
     "[TEST] Synthetic beam (not measured)",
     "[MANUFAC] Beam Synth",
-    `[LUMINAIRE] ${c.beam === "low" ? "Low beam (passing)" : "High beam (driving)"} ${c.lht ? "LHT" : "RHT"}`,
+    `[LUMINAIRE] ${c.beam === "low" ? "Low beam (passing)" : "High beam (driving)"}, ${PRESET_TABLES[c.key].name}, ${c.lht ? "LHT" : "RHT"}`,
     `[_IMAX] ${Math.round(S.res.imax)} cd`, `[_FLUX] ${Math.round(S.res.flux)} lm`,
     `[_GENERATED] ${new Date().toISOString().slice(0, 10)}`,
     "TILT=NONE",
@@ -404,13 +435,13 @@ $("iesCopy").onclick = () => { if (!S.res) return; if (!$("iesOut").value) $("ie
 $("paramCopy").onclick = () => {
   if (!S.P) return;
   const r2 = x => Math.round(x * 1000) / 1000;
-  const o = { function: S.cfg.beam, traffic: S.cfg.lht ? "LHT" : "RHT", note: "Internal frame is RHT; LHT mirrors H.", cutoff: S.cfg.beam === "low" ? S.cfg.cut : null,
+  const o = { function: S.cfg.beam, class: S.cfg.cls, traffic: S.cfg.lht ? "LHT" : "RHT", note: "Internal frame is RHT; LHT mirrors H.", cutoff: S.cfg.beam === "low" ? S.cfg.cut : null,
     lobes: S.P.comps.map((c, i) => ({ name: ["hot spot", "spread", "foreground"][i], A_cd: Math.round(c.A), h_deg: r2(c.h), v_deg: r2(c.v), sigmaH_deg: r2(c.sh), sigmaV_deg: r2(c.sv) })),
     glareFloor_cd: S.cfg.beam === "low" ? Math.round(S.P.sigA) : 0 };
   const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy"));
 };
 
 // ---------- start ----------
-showTable();
+fillClasses("B"); syncCut(); showTable();
 setTimeout(generate, 50);
 })();

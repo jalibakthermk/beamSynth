@@ -1,6 +1,6 @@
 # beamSynth
 
-A beam pattern synthesizer. Beam Synth generates a synthetic automotive headlamp beam, low beam (passing) or high beam (driving), that complies with the ECE photometric test table, and shows it as an iso-candela plot and a road isolux plot.
+A beam pattern synthesizer. Beam Synth generates a synthetic automotive headlamp beam, low beam (passing) or high beam (driving), that complies with the ECE R149 photometric test table, and shows it as an iso-candela plot and a road isolux plot. Asymmetric (Class B) and symmetric (Classes CS, DS, ES) passing beams are supported, each with its corresponding driving beam.
 
 It runs entirely in the browser: open `docs/index.html`, or the GitHub Pages site once Pages is switched on for the `/docs` folder.
 
@@ -8,11 +8,21 @@ It runs entirely in the browser: open `docs/index.html`, or the GitHub Pages sit
 
 - **Two ways to define the beam**
   - **Road requirement (JSON):** give customer requirements on the road and the tool solves for a beam that meets them. The format is the same requirement set used in [road-illuminate](https://github.com/jalibakthermk/Road-illuminate), so one customer-spec file works in both tools.
-  - **Beam parameters:** beam function, maximum intensity (cd), luminous flux (lm), horizontal spread (±°, half-width at 5 % of Imax) and vertical spread (°, height at 5 % of Imax).
-- **ECE compliance is enforced while solving.** The regulation test table (ECE R112 / R149 Class B passing beam, or driving beam) is a hard constraint; your parameters are soft targets. If a request cannot meet ECE, the tool shows the closest compliant result and reports requested against achieved values.
+  - **Beam parameters:** beam function, R149 class, maximum intensity (cd), luminous flux (lm), horizontal spread (±°, half-width at 5 % of Imax) and vertical spread (°, height at 5 % of Imax).
+- **ECE compliance is enforced while solving.** The regulation test table for the selected class is a hard constraint; your parameters are soft targets. If a request cannot meet ECE, the tool shows the closest compliant result and reports requested against achieved values.
 - **Iso-candela view** in cd or lx at 25 m, with test points, zones, the cut-off line and the hot spot.
 - **Road illumination** for the lamp pair, top view with lane markings, using either *vertical planes on road* (the HSPR / GTB method, default) or *road surface* (horizontal plane) illuminance.
 - **Compliance tables** for every ECE point, zone and sum, and for every road check.
+- **Classes (R149)**
+
+  | Function | Class | Cut-off | Test table |
+  |---|---|---|---|
+  | Low beam | B | asymmetric, 15° shoulder | B50L, 75R/L, 50R/L/V, 25R/L, P1–P8, Zones I, III, IV |
+  | Low beam | CS, DS, ES | symmetric, flat at 0.57° D | points 1–15, Line 1 (2° D, 9L–9R), Zones 1 and 2 |
+  | High beam | with Class B | – | Imax 48 000–215 000 cd, HV ≥ 0.8 Imax, H-2.5, H-5 |
+  | High beam | BS, CS, DS / ES | – | Imax min 20 000 / 25 000 / 40 000 cd (max 215 000), H-V, H-2.5, H-5, and for CS and DS / ES also H-9, H-12, 2U-V |
+
+  For symmetric passing beams the lobes are centred on V-V. The symmetric driving beams have no "HV within 80 % of Imax" check, as R149 exempts them.
 - **Right- or left-hand traffic.** The tables are written for RHT; LHT mirrors the beam.
 - **Export**
   - IES LM-63-2002, photometric type B (H-V), absolute candela, one lamp. Load it into road-illuminate to verify the beam.
@@ -26,6 +36,7 @@ Paste a road-illuminate requirement set as it is (a list of checks), or wrap it 
 ```json
 {
   "function": "low",
+  "class": "B",
   "traffic": "RHT",
   "mounting": { "height_m": 0.65, "spacing_m": 1.4 },
   "plane": "vertical",
@@ -51,6 +62,7 @@ Paste a road-illuminate requirement set as it is (a list of checks), or wrap it 
 - `x` is distance ahead of the lamps, `y` is lateral offset from the vehicle centreline, **positive to the left** (as in road-illuminate). Values are for the lamp pair.
 - `op` is `">="` or `"<="`.
 - `z` (optional, per check) sets that check's evaluation height. This is a Beam Synth extension; road-illuminate ignores it.
+- `class` (optional): `B`, `CS`, `DS`, `ES` for the passing beam; `B`, `BS`, `CS`, `DSES` for the driving beam.
 - `targets` (optional) are soft goals: `imax`, `flux_lm`, `spreadH_deg`, `spreadV_deg`.
 
 Examples are in [`examples/`](examples).
@@ -59,9 +71,9 @@ A glare zone at road level on the oncoming lane conflicts with ECE when using ve
 
 ## How the beam is built
 
-The intensity distribution is a sum of three Gaussian lobes (hot spot, spread, foreground). For the low beam it is multiplied by a logistic cut-off (horizontal elbow at 0.57° D with a 15° shoulder, all adjustable) and has a glare-floor term above the cut-off to light the signal points P1–P8. An evolution-strategy solver adjusts the lobes until the ECE table and the road checks are met, staying as close as possible to the requested Imax, flux and spread.
+The intensity distribution is a sum of three Gaussian lobes (hot spot, spread, foreground). For the low beam it is multiplied by a logistic cut-off (horizontal elbow at 0.57° D with a 15° shoulder for Class B, flat for the symmetric classes, all adjustable) and has a glare-floor term above the cut-off to light the signal points P1–P8. An evolution-strategy solver adjusts the lobes until the ECE table and the road checks are met, staying as close as possible to the requested Imax, flux and spread.
 
-The ECE preset values are a starting point. Check them against the regulation series you certify to and edit the test table in the tool as needed.
+The ECE preset values are a starting point. The symmetric class values follow R113 (01 series), which R149 carries over. Check them against the regulation series you certify to and edit the test table in the tool as needed.
 
 ## Repository layout
 
@@ -80,4 +92,6 @@ After editing anything in `src/`, run `python3 build.py`.
 
 Settings → Pages → Build and deployment → Deploy from a branch → `main`, folder `/docs`.
 
-© 2026 Jalib Akther
+## License
+
+Released under the [MIT License](LICENSE). © 2026 Jalib Akther
