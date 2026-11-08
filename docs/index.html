@@ -1,0 +1,1123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Beam Synth</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: instrument bench — input rail on the left, two dark "screens" (goniometer + road) on the right, results below. */
+:root{
+  --bg:#eef1f3; --surface:#ffffff; --sunk:#e4e9ec; --ink:#14202b; --muted:#566774; --line:#d3dbe1;
+  --accent:#a95f00; --accent-ink:#ffffff; --accent-soft:#f6e6cf;
+  --pass:#22804a; --fail:#c3352b; --info:#6b7b88;
+  --plot-bg:#0d151d; --plot-ink:#c7d4de; --plot-dim:#7d8d9a; --plot-grid:rgba(199,212,222,.13); --plot-axis:rgba(199,212,222,.45);
+  --f-display:"Saira Semi Condensed","Arial Narrow",sans-serif;
+  --f-body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0a1016; --surface:#111a22; --sunk:#0d151c; --ink:#e1e8ee; --muted:#8c9daa; --line:#22313d;
+  --accent:#f0a43a; --accent-ink:#1b1206; --accent-soft:#3a2a12;
+  --pass:#4cc27a; --fail:#ff6b5d; --info:#8c9daa; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0a1016; --surface:#111a22; --sunk:#0d151c; --ink:#e1e8ee; --muted:#8c9daa; --line:#22313d;
+  --accent:#f0a43a; --accent-ink:#1b1206; --accent-soft:#3a2a12;
+  --pass:#4cc27a; --fail:#ff6b5d; --info:#8c9daa; color-scheme:dark;}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1380px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px;border-bottom:1px solid var(--line);padding-bottom:12px}
+h1{font-family:var(--f-display);font-weight:700;font-size:30px;letter-spacing:.01em;margin:0;line-height:1.05;text-wrap:balance}
+h1 span{color:var(--accent)}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:46px;height:46px;flex:none}
+.sub{color:var(--muted);margin:4px 0 0;max-width:62ch}
+.reg{font-family:var(--f-mono);font-size:12px;color:var(--muted);text-align:right}
+.bench{display:grid;grid-template-columns:minmax(300px,360px) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.bench{grid-template-columns:minmax(0,1fr)}}
+aside{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--sunk);border-radius:5px;padding:3px;gap:3px}
+.seg button{font:600 13px var(--f-body);border:0;border-radius:4px;padding:8px 6px;background:transparent;color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.lab{font:600 11px var(--f-display);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0}
+fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:9px;min-width:0}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--muted);min-width:0}
+label.f small{font-size:11.5px;color:var(--muted);opacity:.85}
+input,select,textarea{font:14px var(--f-body);color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:7px 8px;width:100%;min-width:0}
+input[type=number]{font-family:var(--f-mono);font-size:13.5px}
+textarea{font:12px/1.45 var(--f-mono);resize:vertical;white-space:pre;overflow:auto;tab-size:2}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btnrow{display:flex;flex-wrap:wrap;gap:6px}
+.btn{font:600 13px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:6px 10px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.go{font:700 16px var(--f-display);letter-spacing:.04em;background:var(--accent);color:var(--accent-ink);border:0;border-radius:5px;padding:11px;cursor:pointer;width:100%}
+.go:disabled{opacity:.6;cursor:progress}
+.prog{height:4px;background:var(--sunk);border-radius:2px;overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .1s}
+.msg{font-size:13px;color:var(--muted);min-height:1.2em}
+.msg.err{color:var(--fail)}
+details{border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;font:600 12px var(--f-display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+details>div{margin-top:10px;display:flex;flex-direction:column;gap:9px}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+main{display:flex;flex-direction:column;gap:18px;min-width:0}
+.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.kv{background:var(--surface);padding:10px 12px;min-width:0}
+.kv b{display:block;font:600 11px var(--f-display);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.kv span{font:500 18px var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.kv em{display:block;font-style:normal;font-size:12px;color:var(--muted)}
+.verdict span{font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:.03em}
+.ok{color:var(--pass)} .bad{color:var(--fail)}
+.screen{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden;min-width:0}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.bar h2{font:700 17px var(--f-display);margin:0 auto 0 0;letter-spacing:.02em}
+.bar label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.bar select{width:auto;padding:4px 6px;font-size:13px}
+.bar input[type=checkbox]{width:auto}
+.cv{position:relative;background:var(--plot-bg)}
+.cv canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
+.foot{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--plot-bg);color:var(--plot-ink);border-top:1px solid rgba(255,255,255,.06)}
+.readout{font:12.5px var(--f-mono);font-variant-numeric:tabular-nums;min-height:1.4em}
+.legend{display:flex;flex-wrap:wrap;gap:4px 10px;font:11.5px var(--f-mono);color:var(--plot-dim)}
+.legend i{display:inline-block;width:12px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.tables{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:18px}
+@media (max-width:1500px){.tables{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.kv span{font-size:16px}}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font:600 11px var(--f-display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums}
+td.n{font-family:var(--f-mono);font-size:12.5px;text-align:right}
+td.id{font-weight:600}
+.pill{display:inline-block;font:700 11px var(--f-display);letter-spacing:.08em;padding:2px 7px;border-radius:3px}
+.pill.p{background:color-mix(in srgb,var(--pass) 16%,transparent);color:var(--pass)}
+.pill.f{background:color-mix(in srgb,var(--fail) 16%,transparent);color:var(--fail)}
+.pill.i{background:var(--sunk);color:var(--info)}
+tr.fail td{background:color-mix(in srgb,var(--fail) 6%,transparent)}
+.export{padding:12px;display:flex;flex-direction:column;gap:10px}
+.export textarea{height:150px}
+footer{color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding-top:10px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px}
+@media (prefers-reduced-motion:reduce){.prog i{transition:none}}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+<header>
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 48 48" aria-hidden="true">
+  <defs><clipPath id="lbClip"><path d="M3 25 H22 L31 18 H45 V44 H3 Z"/></clipPath></defs>
+  <rect x="1.5" y="1.5" width="45" height="45" rx="9" fill="var(--plot-bg)"/>
+  <g clip-path="url(#lbClip)">
+    <ellipse cx="25" cy="28" rx="20" ry="9" fill="#1c5c8c"/>
+    <ellipse cx="26" cy="27.5" rx="14" ry="6.2" fill="#179498"/>
+    <ellipse cx="27" cy="27" rx="9" ry="4.2" fill="#d6d046"/>
+    <ellipse cx="27.5" cy="26.6" rx="4.6" ry="2.4" fill="#e24e3a"/>
+  </g>
+  <path d="M5 25 H22 L31 18 H43" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(36 37)" fill="var(--accent)">
+    <circle r="5.2"/>
+    <g stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round">
+      <path d="M0 -7.2V7.2M-7.2 0H7.2M-5.1 -5.1L5.1 5.1M-5.1 5.1L5.1 -5.1"/>
+    </g>
+    <circle r="2" fill="var(--plot-bg)"/>
+  </g>
+</svg>
+    <h1>Beam <span>Synth</span></h1>
+  </div>
+</header>
+
+<div class="bench">
+<aside>
+  <div class="seg" role="group" aria-label="Input mode">
+    <button id="mRoad" aria-pressed="false">Road requirement</button>
+    <button id="mParam" aria-pressed="true">Beam parameters</button>
+  </div>
+
+  <fieldset id="paramPanel">
+    <p class="lab">Beam parameters</p>
+    <label class="f">Beam function
+      <select id="fn"><option value="low">Low beam (passing)</option><option value="high">High beam (driving)</option></select>
+    </label>
+    <div class="row2">
+      <label class="f">Maximum intensity (cd)<input id="imax" type="number" step="500" value="30000"></label>
+      <label class="f">Luminous flux (lm)<input id="flux" type="number" step="10" value="800"></label>
+    </div>
+    <div class="row2">
+      <label class="f">H spread (±°)<input id="sph" type="number" step="0.5" value="14"><small>half-width at 5 % Imax</small></label>
+      <label class="f">V spread (°)<input id="spv" type="number" step="0.5" value="4"><small>height at 5 % Imax</small></label>
+    </div>
+  </fieldset>
+
+  <fieldset id="roadPanel" hidden>
+    <p class="lab">Road requirement (JSON)</p>
+    <textarea id="roadJson" rows="18" spellcheck="false" aria-label="Road requirement JSON"></textarea>
+    <div class="btnrow">
+      <button class="btn" id="exLow">Low-beam example</button>
+      <button class="btn" id="exHigh">High-beam example</button>
+    </div>
+    <p class="note">Paste a road-illuminate requirement set as is, or wrap it as <code>"checks"</code> with vehicle settings. Check types: <code>point</code>, <code>range</code>, <code>width</code>, <code>zone</code>, with <code>op</code> and <code>limit</code>; <code>y</code> is positive to the left, as in road-illuminate. Optional <code>z</code> per check sets its evaluation height. Optional <code>targets</code>: <code>imax</code>, <code>flux_lm</code>, <code>spreadH_deg</code>, <code>spreadV_deg</code>.</p>
+  </fieldset>
+
+  <fieldset>
+    <p class="lab">Vehicle</p>
+    <div class="row2">
+      <label class="f">Traffic<select id="traffic"><option value="RHT">Right-hand (RHT)</option><option value="LHT">Left-hand (LHT)</option></select></label>
+      <label class="f">Mounting height (m)<input id="mh" type="number" step="0.01" value="0.65"></label>
+    </div>
+    <div class="row2">
+      <label class="f">Lamp spacing (m)<input id="sp" type="number" step="0.05" value="1.4"></label>
+      <label class="f">Evaluation height (m)<input id="evalH" type="number" step="0.05" min="0" value="0"></label>
+    </div>
+  </fieldset>
+
+  <details id="cutBox">
+    <summary>Cut-off geometry (low beam)</summary>
+    <div>
+      <div class="row2">
+        <label class="f">Elbow V (°)<input id="cElbow" type="number" step="0.01" value="-0.57"></label>
+        <label class="f">Shoulder angle (°)<input id="cAngle" type="number" step="1" value="15"></label>
+      </div>
+      <div class="row2">
+        <label class="f">Shoulder top V (°)<input id="cCap" type="number" step="0.05" value="0.5"></label>
+        <label class="f">Gradient width (°)<input id="cSharp" type="number" step="0.01" value="0.08"></label>
+      </div>
+      <p class="note">Elbow on the V-V line. Gradient width sets cut-off sharpness (logistic scale).</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Regulation test table</summary>
+    <div>
+      <p class="note" id="tableNote"></p>
+      <textarea id="tableJson" rows="14" spellcheck="false" aria-label="Regulation test table JSON"></textarea>
+      <div class="btnrow"><button class="btn" id="tableReset">Reset to preset</button></div>
+      <p class="note">Entries: point (<code>h</code>, <code>v</code>), <code>zone</code> polygon, <code>sum</code> of point ids, or <code>imax</code>. Limits: <code>min</code>, <code>max</code>, <code>minRatioImax</code>, <code>maxRef {id,k}</code>. Always written for RHT; LHT is mirrored.</p>
+    </div>
+  </details>
+
+  <button class="go" id="go">Generate beam</button>
+  <div class="prog" aria-hidden="true"><i id="progBar"></i></div>
+  <p class="msg" id="msg"></p>
+</aside>
+
+<main>
+  <section class="summary" id="summary" aria-label="Result summary"></section>
+
+  <section class="screen">
+    <div class="bar">
+      <h2>Iso-candela</h2>
+      <label>Unit <select id="isoUnit"><option value="cd">cd</option><option value="lx">lx at 25 m</option></select></label>
+      <label>Range <select id="isoRange"><option value="20">±20°</option><option value="40" selected>±40°</option><option value="60">±60°</option></select></label>
+      <label><input type="checkbox" id="isoPts" checked> Test points</label>
+    </div>
+    <div class="cv"><canvas id="isoCv" aria-label="Iso-candela plot of the synthetic beam"></canvas></div>
+    <div class="foot"><div class="readout" id="isoRead">Hover or touch the plot to read intensity</div><div class="legend" id="isoLeg"></div></div>
+  </section>
+
+  <section class="screen">
+    <div class="bar">
+      <h2>Road illumination</h2>
+      <label>Method <select id="plane"><option value="vertical">Vertical planes on road</option><option value="horizontal">Road surface</option></select></label>
+      <label>Range <select id="roadRange"><option value="100">100 m</option><option value="150" selected>150 m</option><option value="250">250 m</option><option value="400">400 m</option></select></label>
+      <label><input type="checkbox" id="roadPts" checked> Targets</label>
+    </div>
+    <div class="cv"><canvas id="roadCv" aria-label="Bird's-eye road isolux plot for the lamp pair"></canvas></div>
+    <div class="foot"><div class="readout" id="roadRead">Lamp pair, both lamps on</div><div class="legend" id="roadLeg"></div></div>
+  </section>
+
+  <div class="tables">
+    <section class="screen">
+      <div class="bar"><h2>ECE compliance</h2><span class="note" id="tblName"></span></div>
+      <div class="tbl"><table id="ecTbl"></table></div>
+    </section>
+    <section class="screen">
+      <div class="bar"><h2>Road checks</h2><span class="note" id="roadMode"></span></div>
+      <div class="tbl"><table id="rdTbl"></table></div>
+    </section>
+  </div>
+
+  <section class="screen">
+    <div class="bar"><h2>Export</h2><span class="note">IES LM-63-2002, photometric type B (H-V), absolute cd, one lamp</span></div>
+    <div class="export">
+      <div class="btnrow"><button class="btn" id="iesBuild">Build IES</button><button class="btn" id="iesCopy">Copy IES</button><button class="btn" id="paramCopy">Copy model parameters</button><button class="btn" id="riCopy">Copy checks for road-illuminate</button></div>
+      <textarea id="iesOut" readonly spellcheck="false" aria-label="IES output" placeholder="Build the IES file, then copy it into a .ies file."></textarea>
+    </div>
+  </section>
+</main>
+</div>
+
+<footer>
+  <span>Synthetic intensity model: three Gaussian lobes, logistic cut-off and a glare-floor term, fitted with an evolution-strategy solver.</span>
+  <span>© 2026 Jalib Akther</span>
+</footer>
+</div>
+
+<script>
+// ---------- Synthetic beam core (internal frame: right-hand traffic, H + right, V + up, degrees) ----------
+const DEG = Math.PI / 180;
+
+const PRESET_TABLES = {
+  low: {
+    name: "ECE R112 / R149 Class B passing beam",
+    note: "Values in cd for right-hand traffic. Check against the regulation series you certify to and edit as needed.",
+    points: [
+      { id: "B50L", h: -3.43, v: 0.57, max: 350 },
+      { id: "75R", h: 1.15, v: -0.57, min: 10100 },
+      { id: "75L", h: -3.43, v: -0.57, max: 10600 },
+      { id: "50L", h: -3.43, v: -0.86, max: 13200 },
+      { id: "50R", h: 1.72, v: -0.86, min: 10100 },
+      { id: "50V", h: 0, v: -0.86, min: 5100 },
+      { id: "25L", h: -9, v: -1.72, min: 1700 },
+      { id: "25R", h: 9, v: -1.72, min: 1700 },
+      { id: "P1", h: -4, v: 4, info: true },
+      { id: "P2", h: 0, v: 4, info: true },
+      { id: "P3", h: 4, v: 4, info: true },
+      { id: "P4", h: -4, v: 2, info: true },
+      { id: "P5", h: 0, v: 2, info: true },
+      { id: "P6", h: 4, v: 2, info: true },
+      { id: "P7", h: -8, v: 0, min: 65 },
+      { id: "P8", h: 8, v: 0, min: 125 },
+      { id: "P1+P2+P3", sum: ["P1", "P2", "P3"], min: 190 },
+      { id: "P4+P5+P6", sum: ["P4", "P5", "P6"], min: 375 },
+      { id: "Zone III", zone: [[-8, 1], [-8, 4], [8, 4], [8, 2], [4, 2], [1, 1]], max: 625 },
+      { id: "Zone IV", zone: [[-5.15, -0.86], [5.15, -0.86], [5.15, -1.72], [-5.15, -1.72]], min: 2500 },
+      { id: "Zone I", zone: [[-9, -1.72], [9, -1.72], [9, -6], [-9, -6]], maxRef: { id: "50R", k: 2 } }
+    ]
+  },
+  high: {
+    name: "ECE R112 / R149 driving beam",
+    note: "Values in cd per lamp. Check against the regulation series you certify to and edit as needed.",
+    points: [
+      { id: "Imax", imax: true, min: 48000, max: 215000 },
+      { id: "HV", h: 0, v: 0, minRatioImax: 0.8 },
+      { id: "H-2.5L", h: -2.5, v: 0, min: 24000 },
+      { id: "H-2.5R", h: 2.5, v: 0, min: 24000 },
+      { id: "H-5L", h: -5, v: 0, min: 6000 },
+      { id: "H-5R", h: 5, v: 0, min: 6000 }
+    ]
+  }
+};
+
+const PRESET_ROAD = {
+  low: {
+    function: "low", traffic: "RHT",
+    mounting: { height_m: 0.65, spacing_m: 1.4 },
+    plane: "vertical", evalHeight_m: 0,
+    road: { laneWidth_m: 3.5 },
+    targets: { flux_lm: 800 },
+    checks: [
+      { label: "Ego lane 50 m", type: "point", x: 50, y: 0, op: ">=", limit: 8 },
+      { label: "Reach on vehicle axis, 3 lx", type: "range", y: 0, thr: 3, op: ">=", limit: 75 },
+      { label: "Kerb-side reach, 1 lx along right edge", type: "range", y: -1.75, thr: 1, op: ">=", limit: 90 },
+      { label: "Foreground spread, 1 lx width at 20 m", type: "width", x: 20, thr: 1, op: ">=", limit: 25 },
+      { label: "Oncoming driver eye, 50-100 m", type: "zone", x1: 50, x2: 100, y1: 1.75, y2: 5.25, z: 1.1, stat: "max", op: "<=", limit: 0.6 }
+    ]
+  },
+  high: {
+    function: "high", traffic: "RHT",
+    mounting: { height_m: 0.65, spacing_m: 1.4 },
+    plane: "vertical", evalHeight_m: 0,
+    road: { laneWidth_m: 3.5 },
+    targets: { flux_lm: 1200 },
+    checks: [
+      { label: "Centre 100 m", type: "point", x: 100, y: 0, op: ">=", limit: 10 },
+      { label: "Reach on vehicle axis, 1 lx", type: "range", y: 0, thr: 1, op: ">=", limit: 300 },
+      { label: "Reach along left edge, 3 lx", type: "range", y: 5.25, thr: 3, op: ">=", limit: 120 },
+      { label: "Width of 3 lx at 60 m", type: "width", x: 60, thr: 3, op: ">=", limit: 15 },
+      { label: "Right verge 30-60 m, min", type: "zone", x1: 30, x2: 60, y1: -1.75, y2: -5, stat: "min", op: ">=", limit: 3 }
+    ]
+  }
+};
+
+const BOUNDS = {
+  low: [
+    ["log", 2000, 150000], ["lin", -3, 4], ["lin", -3, -0.4], ["log", 0.8, 10], ["log", 0.3, 3],
+    ["log", 200, 60000], ["lin", -4, 4], ["lin", -5, -0.4], ["log", 2, 40], ["log", 0.6, 6],
+    ["log", 30, 20000], ["lin", -14, -1.5], ["log", 8, 70], ["log", 1.5, 15],
+    ["log", 10, 600]
+  ],
+  high: [
+    ["log", 5000, 260000], ["lin", -2, 2], ["lin", -1.5, 1.5], ["log", 0.8, 10], ["log", 0.5, 5],
+    ["log", 300, 150000], ["lin", -2, 2], ["lin", -2.5, 1], ["log", 3, 40], ["log", 1, 10],
+    ["log", 30, 30000], ["lin", -10, 0], ["log", 10, 70], ["log", 2, 15],
+    ["log", 1, 2]
+  ]
+};
+
+function decodeVal(b, u) { return b[0] === "log" ? b[1] * Math.pow(b[2] / b[1], u) : b[1] + u * (b[2] - b[1]); }
+function encodeVal(b, x) {
+  x = Math.min(Math.max(x, b[1]), b[2]);
+  return b[0] === "log" ? Math.log(x / b[1]) / Math.log(b[2] / b[1]) : (x - b[1]) / (b[2] - b[1]);
+}
+
+function decode(u, beam, cut) {
+  const B = BOUNDS[beam], x = u.map((ui, i) => decodeVal(B[i], ui));
+  return {
+    beam, cut,
+    comps: [
+      { A: x[0], h: x[1], v: x[2], sh: x[3], sv: x[4] },
+      { A: x[5], h: x[6], v: x[7], sh: x[8], sv: x[9] },
+      { A: x[10], h: 0, v: x[11], sh: x[12], sv: x[13] }
+    ],
+    sigA: beam === "low" ? x[14] : 0
+  };
+}
+function encode(phys, beam) {
+  const B = BOUNDS[beam], c = phys.comps;
+  const x = [c[0].A, c[0].h, c[0].v, c[0].sh, c[0].sv, c[1].A, c[1].h, c[1].v, c[1].sh, c[1].sv,
+    c[2].A, c[2].v, c[2].sh, c[2].sv, beam === "low" ? phys.sigA : 1.5];
+  return x.map((xi, i) => encodeVal(B[i], xi));
+}
+
+function cutoffV(cut, h) { return h > 0 ? Math.min(cut.elbow + h * Math.tan(cut.angle * DEG), Math.max(cut.cap, cut.elbow)) : cut.elbow; }
+function maskAt(P, h, v) { if (P.beam !== "low") return 1; return 1 / (1 + Math.exp((v - cutoffV(P.cut, h)) / P.cut.sharp)); }
+const SIG_SH = 12, SIG_V = 2, SIG_SV = 2.5;
+function sigAt(h, v) { const a = h / SIG_SH, b = (v - SIG_V) / SIG_SV; return Math.exp(-0.5 * (a * a + b * b)); }
+
+function evalM(P, h, v, m) {
+  let s = 0;
+  for (const c of P.comps) { const a = (h - c.h) / c.sh, b = (v - c.v) / c.sv; s += c.A * Math.exp(-0.5 * (a * a + b * b)); }
+  if (P.beam === "low") { s = s * m + P.sigA * sigAt(h, v); }
+  return s;
+}
+function evalI(P, h, v) { return evalM(P, h, v, maskAt(P, h, v)); }
+
+// ---------- grids ----------
+function makeGrid(beam, cut, h0, h1, dh, v0, v1, dv) {
+  const nh = Math.round((h1 - h0) / dh) + 1, nv = Math.round((v1 - v0) / dv) + 1;
+  const hs = new Float64Array(nh), vs = new Float64Array(nv);
+  for (let i = 0; i < nh; i++) hs[i] = h0 + i * dh;
+  for (let j = 0; j < nv; j++) vs[j] = v0 + j * dv;
+  const P0 = { beam, cut };
+  let mask = null;
+  if (beam === "low") { mask = new Float64Array(nh * nv); for (let j = 0; j < nv; j++) for (let i = 0; i < nh; i++) mask[j * nh + i] = maskAt(P0, hs[i], vs[j]); }
+  const sgh = new Float64Array(nh), sgv = new Float64Array(nv);
+  for (let i = 0; i < nh; i++) sgh[i] = Math.exp(-0.5 * (hs[i] / SIG_SH) ** 2);
+  for (let j = 0; j < nv; j++) sgv[j] = Math.exp(-0.5 * ((vs[j] - SIG_V) / SIG_SV) ** 2);
+  const dOm = new Float64Array(nv);
+  for (let j = 0; j < nv; j++) dOm[j] = Math.cos(vs[j] * DEG) * dh * dv * DEG * DEG;
+  return { beam, nh, nv, hs, vs, dh, dv, mask, sgh, sgv, dOm, out: new Float64Array(nh * nv), env: new Float64Array(nh),
+    gh: [0, 1, 2].map(() => new Float64Array(nh)), gv: [0, 1, 2].map(() => new Float64Array(nv)) };
+}
+
+function evalGrid(P, G) {
+  const { nh, nv, hs, vs, mask, out, env, gh, gv } = G;
+  for (let k = 0; k < 3; k++) {
+    const c = P.comps[k];
+    for (let i = 0; i < nh; i++) { const a = (hs[i] - c.h) / c.sh; gh[k][i] = c.A * Math.exp(-0.5 * a * a); }
+    for (let j = 0; j < nv; j++) { const b = (vs[j] - c.v) / c.sv; gv[k][j] = Math.exp(-0.5 * b * b); }
+  }
+  const g0 = gh[0], g1 = gh[1], g2 = gh[2], low = P.beam === "low", sA = P.sigA;
+  let max = -1, mi = 0, mj = 0, flux = 0;
+  env.fill(0);
+  for (let j = 0; j < nv; j++) {
+    const a0 = gv[0][j], a1 = gv[1][j], a2 = gv[2][j], sv = G.sgv[j] * sA, row = j * nh;
+    let rowSum = 0;
+    for (let i = 0; i < nh; i++) {
+      let s = g0[i] * a0 + g1[i] * a1 + g2[i] * a2;
+      if (low) s = s * mask[row + i] + G.sgh[i] * sv;
+      out[row + i] = s; rowSum += s;
+      if (s > env[i]) env[i] = s;
+      if (s > max) { max = s; mi = i; mj = j; }
+    }
+    flux += rowSum * G.dOm[j];
+  }
+  return { imax: max, hMax: hs[mi], vMax: vs[mj], mi, mj, flux };
+}
+
+function crossing(xa, ya, xb, yb, t) { return ya === yb ? xb : xa + (t - ya) / (yb - ya) * (xb - xa); }
+
+function spreads(G, r, frac) {
+  const thr = frac * r.imax, { env, hs, nh, nv, vs, out } = G;
+  let L = hs[0], R = hs[nh - 1];
+  for (let i = 0; i < nh; i++) if (env[i] >= thr) { L = i > 0 ? crossing(hs[i - 1], env[i - 1], hs[i], env[i], thr) : hs[0]; break; }
+  for (let i = nh - 1; i >= 0; i--) if (env[i] >= thr) { R = i < nh - 1 ? crossing(hs[i + 1], env[i + 1], hs[i], env[i], thr) : hs[nh - 1]; break; }
+  let B = vs[0], T = vs[nv - 1];
+  const col = j => out[j * nh + r.mi];
+  for (let j = 0; j < nv; j++) if (col(j) >= thr) { B = j > 0 ? crossing(vs[j - 1], col(j - 1), vs[j], col(j), thr) : vs[0]; break; }
+  for (let j = nv - 1; j >= 0; j--) if (col(j) >= thr) { T = j < nv - 1 ? crossing(vs[j + 1], col(j + 1), vs[j], col(j), thr) : vs[nv - 1]; break; }
+  return { left: L, right: R, spreadH: (Math.abs(L) + Math.abs(R)) / 2, bottom: B, top: T, spreadV: T - B };
+}
+
+// ---------- requirement compilation ----------
+function pointInPoly(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+
+function compileTable(table, beam, cut) {
+  const P0 = { beam, cut };
+  return table.map(e => {
+    const c = Object.assign({}, e);
+    if (e.zone) {
+      const xs = e.zone.map(p => p[0]), ys = e.zone.map(p => p[1]);
+      const pts = [];
+      for (let h = Math.min(...xs); h <= Math.max(...xs) + 1e-9; h += 0.25)
+        for (let v = Math.min(...ys); v <= Math.max(...ys) + 1e-9; v += 0.25)
+          if (pointInPoly(h, v, e.zone) || e.zone.some(p => Math.abs(p[0] - h) < 1e-6 && Math.abs(p[1] - v) < 1e-6)) pts.push([h, v, maskAt(P0, h, v)]);
+      e.zone.forEach(p => pts.push([p[0], p[1], maskAt(P0, p[0], p[1])]));
+      c.samples = pts;
+    } else if (e.h != null) c.m = maskAt(P0, e.h, e.v);
+    return c;
+  });
+}
+
+// ---------- road checks (road-illuminate requirement format) ----------
+// A check is normalised to: {label, type: point|range|width|zone, x, y, thr, x1, x2, y1, y2, stat, z, min, max}
+// with y positive to the RIGHT (Beam Synth display frame). road-illuminate files use y positive to the LEFT.
+function normalizeChecks(src) {
+  const out = [];
+  const opLim = (c, o) => {
+    if (c.op === ">=" || c.op === ">") o.min = +c.limit;
+    else if (c.op === "<=" || c.op === "<") o.max = +c.limit;
+    if (c.min != null) o.min = +c.min;
+    if (c.max != null) o.max = +c.max;
+  };
+  const list = Array.isArray(src) ? src : [];
+  list.forEach((c, i) => {
+    if (!c || typeof c !== "object") return;
+    const label = c.label || c.id || `Check ${i + 1}`;
+    if (c.x_m != null && c.y_m != null && !c.type) {           // Beam Synth v1 point format (y + right)
+      const o = { label, type: "point", x: +c.x_m, y: +c.y_m, z: c.z_m != null ? +c.z_m : null };
+      opLim(c, o); out.push(o); return;
+    }
+    const t = c.type, z = c.z != null ? +c.z : null;
+    const o = { label, type: t, z, src: c };
+    if (t === "point") { o.x = +c.x; o.y = -c.y; }
+    else if (t === "range") { o.y = -c.y; o.thr = +c.thr; }
+    else if (t === "width") { o.x = +c.x; o.thr = +c.thr; }
+    else if (t === "zone") { o.x1 = Math.min(+c.x1, +c.x2); o.x2 = Math.max(+c.x1, +c.x2); const a = -c.y1, b = -c.y2; o.y1 = Math.min(a, b); o.y2 = Math.max(a, b); o.stat = c.stat || "max"; }
+    else return;
+    opLim(c, o);
+    const bad = ["x", "y", "thr", "x1", "x2", "y1", "y2"].some(k => k in o && !isFinite(o[k]));
+    if (!bad && (o.min != null || o.max != null || t)) out.push(o);
+  });
+  return out;
+}
+
+function toRoadIlluminate(checks) {
+  const r = v => Math.round(v * 1000) / 1000;
+  return checks.map(c => {
+    const o = { label: c.label, type: c.type };
+    if (c.type === "point") { o.x = r(c.x); o.y = r(-c.y); }
+    if (c.type === "range") { o.y = r(-c.y); o.thr = c.thr; }
+    if (c.type === "width") { o.x = r(c.x); o.thr = c.thr; }
+    if (c.type === "zone") { o.x1 = c.x1; o.x2 = c.x2; o.y1 = r(-c.y2); o.y2 = r(-c.y1); o.stat = c.stat; }
+    if (c.z != null) o.z = c.z;
+    if (c.min != null) { o.op = ">="; o.limit = c.min; } else if (c.max != null) { o.op = "<="; o.limit = c.max; }
+    return o;
+  });
+}
+
+function makeSampler(spec, beam, cut) {
+  const P0 = { beam, cut }, H = spec.height, s = spec.spacing / 2, lht = spec.traffic === "LHT", vert = spec.plane !== "horizontal";
+  return (x, y, z) => {
+    const yi = lht ? -y : y;
+    return [-s, s].map(ly => {
+      const dx = x, dy = yi - ly, dz = z - H, d = Math.hypot(dx, dy, dz);
+      const h = Math.atan2(dy, dx) / DEG, v = Math.atan2(dz, Math.hypot(dx, dy)) / DEG;
+      const f = vert ? dx / (d * d * d) : Math.max(0, H - z) / (d * d * d);
+      return { h, v, m: maskAt(P0, h, v), f };
+    });
+  };
+}
+
+function compileRoad(spec, beam, cut) {
+  const smp = makeSampler(spec, beam, cut), zDef = spec.evalH || 0;
+  return (spec.checks || []).map(c => {
+    const z = c.z != null ? c.z : zDef, o = Object.assign({}, c, { zEval: z });
+    if (c.type === "point") o.pts = [smp(c.x, c.y, z)];
+    else if (c.type === "range") {
+      const xMax = Math.max(300, 2 * (c.min || c.max || 0)); o.xs = [];
+      for (let x = 1; x <= xMax; x += 1) o.xs.push(x);
+      o.pts = o.xs.map(x => smp(x, c.y, z));
+    } else if (c.type === "width") {
+      o.ys = []; for (let y = -40; y <= 40 + 1e-9; y += 0.25) o.ys.push(y);
+      o.pts = o.ys.map(y => smp(c.x, y, z));
+    } else if (c.type === "zone") {
+      const nx = Math.max(2, Math.min(40, Math.ceil((c.x2 - c.x1) / 1.5))), ny = Math.max(2, Math.min(16, Math.ceil((c.y2 - c.y1) / 0.4)));
+      o.pts = [];
+      for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) o.pts.push(smp(c.x1 + (c.x2 - c.x1) * i / nx, c.y1 + (c.y2 - c.y1) * j / ny, z));
+    }
+    return o;
+  });
+}
+
+function luxOf(P, lamps) { let E = 0; for (const L of lamps) E += evalM(P, L.h, L.v, L.m) * L.f; return E; }
+
+function checkValue(P, c) {
+  if (c.type === "point") return { val: luxOf(P, c.pts[0]) };
+  const E = c.pts.map(l => luxOf(P, l));
+  if (c.type === "zone") {
+    let v = c.stat === "min" ? Infinity : c.stat === "avg" ? 0 : -Infinity;
+    for (const e of E) { if (c.stat === "min") v = Math.min(v, e); else if (c.stat === "avg") v += e; else v = Math.max(v, e); }
+    return { val: c.stat === "avg" ? v / E.length : v };
+  }
+  if (c.type === "range") {
+    let last = -1; for (let i = 0; i < E.length; i++) if (E[i] >= c.thr) last = i;
+    if (last < 0) return { val: 0, reach: null };
+    const x = last === E.length - 1 ? c.xs[last] : crossing(c.xs[last], E[last], c.xs[last + 1], E[last + 1], c.thr);
+    return { val: x, reach: x };
+  }
+  if (c.type === "width") {
+    let a = -1, b = -1; for (let i = 0; i < E.length; i++) if (E[i] >= c.thr) { if (a < 0) a = i; b = i; }
+    if (a < 0) return { val: 0, span: null };
+    const ya = a > 0 ? crossing(c.ys[a - 1], E[a - 1], c.ys[a], E[a], c.thr) : c.ys[0];
+    const yb = b < E.length - 1 ? crossing(c.ys[b + 1], E[b + 1], c.ys[b], E[b], c.thr) : c.ys[E.length - 1];
+    return { val: yb - ya, span: [ya, yb] };
+  }
+  return { val: NaN };
+}
+
+function roadRow(c, cv) {
+  const r = row({ id: c.label }, "road", cv.val, c.min, c.max);
+  return Object.assign(r, { check: c, reach: cv.reach, span: cv.span, unit: (c.type === "range" || c.type === "width") ? "m" : "lx" });
+}
+
+// ---------- evaluation ----------
+function penalty(val, min, max, margin) {
+  let p = 0;
+  if (min != null && isFinite(min)) { const t = min * (1 + margin); if (val < t) { const r = (t - val) / Math.max(t, 1e-9); p += 200 * r * r + 5 * r; } }
+  if (max != null && isFinite(max)) { const t = max * (1 - margin); if (val > t) { const r = (val - t) / Math.max(t, 1e-9); p += 200 * r * r + 5 * r; } }
+  return p;
+}
+
+function evaluate(P, ctx, detail) {
+  const r = evalGrid(P, ctx.core);
+  const fr = evalGrid(P, ctx.fluxGrid);
+  const imax = Math.max(r.imax, fr.imax), flux = fr.flux;
+  const sp = spreads(ctx.core, r, 0.05);
+  const margin = detail ? 0 : 0.04;
+  let cost = 0;
+  const vals = {}, rows = [];
+  for (const e of ctx.table) {
+    if (e.h != null && !e.zone) vals[e.id] = evalM(P, e.h, e.v, e.m);
+    else if (e.imax) vals[e.id] = imax;
+  }
+  for (const e of ctx.table) {
+    let val, min = e.min, max = e.max, kind = "pt";
+    if (e.zone) {
+      kind = "zone";
+      let lo = Infinity, hi = -Infinity;
+      for (const s of e.samples) { const x = evalM(P, s[0], s[1], s[2]); if (x < lo) lo = x; if (x > hi) hi = x; }
+      if (e.maxRef) max = e.maxRef.k * (vals[e.maxRef.id] || 0);
+      val = min != null ? lo : hi;
+      vals[e.id] = val;
+      if (min != null && max != null) { cost += penalty(lo, min, null, margin) + penalty(hi, null, max, margin); if (detail) rows.push(row(e, kind, lo, min, null), row(e, kind, hi, null, max)); continue; }
+    } else if (e.sum) { kind = "sum"; val = e.sum.reduce((a, id) => a + (vals[id] || 0), 0); vals[e.id] = val; }
+    else val = vals[e.id];
+    if (e.maxRef && !e.zone) max = e.maxRef.k * (vals[e.maxRef.id] || 0);
+    if (e.minRatioImax) min = e.minRatioImax * imax;
+    if (e.info) { if (detail) rows.push(row(e, kind, val, null, null)); continue; }
+    cost += penalty(val, min, max, margin);
+    if (detail) rows.push(row(e, kind, val, min, max));
+  }
+  const roadRows = [];
+  for (const c of ctx.road) {
+    const cv = checkValue(P, c);
+    if (ctx.useRoad) cost += penalty(cv.val, c.min, c.max, margin);
+    if (detail) roadRows.push(roadRow(c, cv));
+  }
+  const t = ctx.targets || {};
+  const soft = (a, b, w) => (b ? w * ((a - b) / b) ** 2 : 0);
+  cost += soft(imax, t.imax, 10) + soft(flux, t.flux, 10) + soft(sp.spreadH, t.spreadH, 3) + soft(sp.spreadV, t.spreadV, 2);
+  if (ctx.useRoad && !t.flux) cost += 0.02 * flux / 1000;
+  if (!detail) return cost;
+  return { cost, imax, flux, hMax: r.hMax, vMax: r.vMax, sp, rows, roadRows, pass: rows.every(x => x.pass !== false), roadPass: roadRows.every(x => x.pass !== false) };
+}
+
+function row(e, kind, val, min, max) {
+  let pass = null, margin = null;
+  if (min != null) { pass = val >= min; margin = (val - min) / min; }
+  if (max != null) { const pm = val <= max, mm = (max - val) / max; pass = pass == null ? pm : pass && pm; margin = margin == null ? mm : Math.min(margin, mm); }
+  return { id: e.id, kind, h: e.h, v: e.v, x: e.x_m, y: e.y_m, z: e.z_m, zone: e.zone, val, min, max, pass, margin };
+}
+
+// ---------- context + solver ----------
+function buildContext(o) {
+  const beam = o.beam, cut = beam === "low" ? o.cut : null;
+  const vRange = beam === "low" ? [-12, 5] : [-12, 12];
+  return {
+    beam, cut,
+    core: makeGrid(beam, cut, -70, 70, 0.4, vRange[0], vRange[1], 0.15),
+    fluxGrid: makeGrid(beam, cut, -90, 90, 1, -60, 40, 0.25),
+    table: compileTable(o.table, beam, cut),
+    road: compileRoad(o.road, beam, cut),
+    useRoad: o.useRoad, targets: o.targets
+  };
+}
+
+function initPhysical(beam, t, cut) {
+  const I = t.imax || (beam === "low" ? 30000 : 90000), S = t.spreadH || (beam === "low" ? 14 : 12), V = t.spreadV || (beam === "low" ? 4 : 6);
+  if (beam === "low") {
+    const e = cut ? cut.elbow : -0.57;
+    return { comps: [
+      { A: I * 1.15, h: 1.5, v: e - 0.55, sh: Math.max(1.5, S / 4.5), sv: Math.min(2.5, Math.max(0.4, V / 5)) },
+      { A: 0.35 * I, h: 0.5, v: e - 0.75, sh: S / 1.97, sv: Math.max(0.8, V / 3) },
+      { A: 0.06 * I, h: 0, v: -4, sh: S * 1.6, sv: 3 }], sigA: 220 };
+  }
+  return { comps: [
+    { A: 0.75 * I, h: 0, v: 0.2, sh: Math.max(1.2, S / 4.5), sv: Math.max(0.6, V / 5) },
+    { A: 0.28 * I, h: 0, v: -0.3, sh: S / 1.6, sv: Math.max(1.2, V / 3) },
+    { A: 0.02 * I, h: 0, v: -3, sh: 25, sv: 4 }], sigA: 0 };
+}
+
+function randn(rng) { let u = 0, v = 0; while (u === 0) u = rng(); v = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+function mulberry(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+function makeSolver(ctx, u0, iters) {
+  const rng = mulberry(12345), beam = ctx.beam, n = u0.length;
+  const f = u => evaluate(decode(u, beam, ctx.cut), ctx, false);
+  const st = { best: u0.slice(), fbest: f(u0), step: 0.08, it: 0, iters };
+  st.run = function (k) {
+    const end = Math.min(st.iters, st.it + k);
+    for (; st.it < end; st.it++) {
+      if (st.it > 0 && st.it % Math.floor(st.iters / 3) === 0) st.step = 0.12;
+      const c = new Array(n);
+      for (let i = 0; i < n; i++) c[i] = Math.min(1, Math.max(0, st.best[i] + st.step * randn(rng)));
+      const fc = f(c);
+      if (fc < st.fbest) { st.best = c; st.fbest = fc; st.step = Math.min(0.3, st.step * 1.25); }
+      else st.step = Math.max(0.002, st.step * 0.955);
+    }
+    return st.it >= st.iters;
+  };
+  return st;
+}
+
+if (typeof module !== "undefined") module.exports = { PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };
+
+</script>
+<script>
+(function () {
+const $ = id => document.getElementById(id);
+const S = { mode: "param", beam: "low", P: null, res: null, cfg: null, tables: {}, busy: false };
+const fmt = (x, d = 0) => (x == null || !isFinite(x)) ? "—" : x.toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
+const fmtCd = x => x >= 100 ? fmt(x) : fmt(x, 1);
+const angH = h => Math.abs(h) < 0.005 ? "0" : fmt(Math.abs(h), 2) + (h > 0 ? "R" : "L");
+const angV = v => Math.abs(v) < 0.005 ? "H" : fmt(Math.abs(v), 2) + (v > 0 ? "U" : "D");
+
+// ---------- presets ----------
+function tableText(beam) { return JSON.stringify(PRESET_TABLES[beam].points, null, 1).replace(/\n\s+(-?[\d.]+),?\n\s+(-?[\d.]+)\n\s+\]/g, (m, a, b) => ` ${a}, ${b}]`); }
+function compactJSON(o) {
+  return JSON.stringify(o, null, 2).replace(/\{\n\s+([^{}\[\]]*?)\n\s+\}/g, (m, body) => "{ " + body.split(/,\n\s+/).join(", ") + " }")
+    .replace(/\[\n\s+(-?[\d.]+),\n\s+(-?[\d.]+)\n\s+\]/g, "[$1, $2]");
+}
+S.tables.low = compactJSON(PRESET_TABLES.low.points);
+S.tables.high = compactJSON(PRESET_TABLES.high.points);
+$("roadJson").value = compactJSON(PRESET_ROAD.low);
+
+function showTable() { $("tableJson").value = S.tables[S.beam]; $("tableNote").textContent = PRESET_TABLES[S.beam].name + ". " + PRESET_TABLES[S.beam].note; $("cutBox").hidden = S.beam !== "low"; }
+$("tableJson").addEventListener("input", () => { S.tables[S.beam] = $("tableJson").value; });
+$("tableReset").onclick = () => { S.tables[S.beam] = compactJSON(PRESET_TABLES[S.beam].points); showTable(); };
+
+const PARAM_DEFAULTS = { low: { imax: 30000, flux: 800, sph: 14, spv: 4 }, high: { imax: 90000, flux: 1200, sph: 12, spv: 6 } };
+$("fn").onchange = () => {
+  S.beam = $("fn").value; const d = PARAM_DEFAULTS[S.beam];
+  $("imax").value = d.imax; $("flux").value = d.flux; $("sph").value = d.sph; $("spv").value = d.spv; showTable();
+};
+$("exLow").onclick = () => { $("roadJson").value = compactJSON(PRESET_ROAD.low); };
+$("exHigh").onclick = () => { $("roadJson").value = compactJSON(PRESET_ROAD.high); };
+
+function setMode(m) {
+  S.mode = m; $("mRoad").setAttribute("aria-pressed", m === "road"); $("mParam").setAttribute("aria-pressed", m === "param");
+  $("roadPanel").hidden = m !== "road"; $("paramPanel").hidden = m !== "param";
+}
+$("mRoad").onclick = () => setMode("road"); $("mParam").onclick = () => setMode("param");
+
+// ---------- generate ----------
+function num(id) { const x = parseFloat($(id).value); return isFinite(x) ? x : null; }
+function msg(t, err) { $("msg").textContent = t; $("msg").className = "msg" + (err ? " err" : ""); }
+
+function gather() {
+  let road = null;
+  try { road = JSON.parse($("roadJson").value); } catch (e) { if (S.mode === "road") throw new Error("Road JSON: " + e.message); }
+  if (S.mode === "road" && road) {
+    if (road.function === "low" || road.function === "high") { $("fn").value = road.function; S.beam = road.function; showTable(); }
+    if (road.traffic === "RHT" || road.traffic === "LHT") $("traffic").value = road.traffic;
+    if (road.mounting) { if (road.mounting.height_m) $("mh").value = road.mounting.height_m; if (road.mounting.spacing_m) $("sp").value = road.mounting.spacing_m; }
+    if (road.plane === "vertical" || road.plane === "horizontal") $("plane").value = road.plane;
+    if (road.evalHeight_m != null && isFinite(road.evalHeight_m)) $("evalH").value = road.evalHeight_m;
+  }
+  S.beam = $("fn").value;
+  let table;
+  try { table = JSON.parse(S.tables[S.beam]); if (!Array.isArray(table)) throw new Error("expected an array"); } catch (e) { throw new Error("Test table: " + e.message); }
+  const cut = { elbow: num("cElbow") ?? -0.57, angle: num("cAngle") ?? 15, cap: num("cCap") ?? 0.5, sharp: Math.max(0.02, num("cSharp") ?? 0.08) };
+  const lht = $("traffic").value === "LHT";
+  const H = num("mh") || 0.65, sp = num("sp") || 1.4;
+  const isSet = Array.isArray(road);                       // bare road-illuminate requirement set
+  const rawChecks = isSet ? road : road ? (road.checks || road.points || []) : [];
+  const applies = S.mode === "road" || isSet || (road && road.function === S.beam);
+  const checks = applies ? normalizeChecks(rawChecks) : [];
+  let targets;
+  if (S.mode === "road") {
+    const t = (road && !isSet && road.targets) || {};
+    targets = { imax: t.imax || null, flux: t.flux_lm || null, spreadH: t.spreadH_deg || null, spreadV: t.spreadV_deg || null };
+    if (!checks.length) throw new Error("No valid checks found. Paste a road-illuminate requirement set (point, range, width, zone) or an object with a \"checks\" list.");
+  } else {
+    targets = { imax: num("imax"), flux: num("flux"), spreadH: num("sph"), spreadV: num("spv") };
+    if (!targets.imax || !targets.flux || !targets.spreadH || !targets.spreadV) throw new Error("Fill in all four beam parameters.");
+  }
+  const lane = (road && !isSet && road.road && road.road.laneWidth_m) || 3.5;
+  const evalH = Math.max(0, num("evalH") || 0);
+  return { beam: S.beam, cut, table, lht, H, sp, checks, evalH, targets, lane, mode: S.mode };
+}
+
+function generate() {
+  if (S.busy) return;
+  let c;
+  try { c = gather(); } catch (e) { msg(e.message, true); return; }
+  S.busy = true; $("go").disabled = true; msg("Solving…");
+  const t0 = performance.now();
+  const ctx = buildContext({ beam: c.beam, cut: c.cut, table: c.table,
+    road: { checks: c.checks, height: c.H, spacing: c.sp, plane: $("plane").value, traffic: c.lht ? "LHT" : "RHT", evalH: c.evalH },
+    useRoad: c.mode === "road", targets: c.targets });
+  const u0 = encode(initPhysical(c.beam, c.targets, c.cut), c.beam);
+  const iters = 2400, solver = makeSolver(ctx, u0, iters);
+  const tick = () => {
+    const done = solver.run(60);
+    $("progBar").style.width = (100 * solver.it / iters) + "%";
+    if (!done) { setTimeout(tick, 0); return; }
+    S.P = decode(solver.best, c.beam, c.cut); S.cfg = c;
+    S.res = evaluate(S.P, Object.assign({}, ctx, { useRoad: true }), true);
+    S.ctx = ctx;
+    S.busy = false; $("go").disabled = false;
+    const nf = S.res.rows.filter(r => r.pass === false).length, nr = S.res.roadRows.filter(r => r.pass === false).length;
+    msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : "All ECE checks pass.") + (nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : ""), nf > 0);
+    $("iesOut").value = "";
+    renderAll();
+  };
+  setTimeout(tick, 20);
+}
+$("go").onclick = generate;
+
+// ---------- display-frame evaluation ----------
+function Idisp(h, v) { return evalI(S.P, S.cfg.lht ? -h : h, v); }
+function luxDisp(x, y, z) {
+  const c = S.cfg; z = z == null ? c.evalH : z; const yi = c.lht ? -y : y, H = c.H, s = c.sp / 2, vert = $("plane").value === "vertical";
+  let E = 0;
+  for (const ly of [-s, s]) {
+    const dx = x, dy = yi - ly, dz = (z || 0) - H, d = Math.hypot(dx, dy, dz);
+    const h = Math.atan2(dy, dx) / DEG, v = Math.atan2(dz, Math.hypot(dx, dy)) / DEG;
+    const f = vert ? dx / (d * d * d) : Math.max(0, H - (z || 0)) / (d * d * d);
+    E += evalI(S.P, h, v) * f;
+  }
+  return E;
+}
+function reach(level) {
+  let last = null;
+  for (let x = 1; x <= 600; x += 0.5) if (luxDisp(x, 0) >= level) last = x;
+  return last;
+}
+
+// ---------- colour + plotting helpers ----------
+const STOPS = [[22, 46, 84], [28, 92, 140], [23, 148, 152], [78, 184, 104], [214, 208, 70], [242, 154, 52], [226, 78, 58], [255, 226, 214]];
+function cmap(t) {
+  t = Math.min(1, Math.max(0, t)) * (STOPS.length - 1); const i = Math.min(STOPS.length - 2, Math.floor(t)), f = t - i, a = STOPS[i], b = STOPS[i + 1];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function rgb(c, a = 1) { return `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`; }
+
+function setupCanvas(cv, aspect) {
+  const w = cv.clientWidth || cv.parentElement.clientWidth, h = Math.round(Math.max(240, Math.min(520, w * aspect)));
+  const dpr = window.devicePixelRatio || 1;
+  cv.style.height = h + "px"; cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { g, w, h };
+}
+
+function marching(vals, nx, ny, L, seg) {
+  const T = [[], [[3, 2]], [[2, 1]], [[3, 1]], [[0, 1]], [[3, 0], [2, 1]], [[0, 2]], [[3, 0]], [[3, 0]], [[0, 2]], [[0, 1], [3, 2]], [[0, 1]], [[3, 1]], [[2, 1]], [[3, 2]], []];
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    const a = vals[j * nx + i], b = vals[j * nx + i + 1], c = vals[(j + 1) * nx + i + 1], d = vals[(j + 1) * nx + i];
+    const k = (a >= L ? 8 : 0) | (b >= L ? 4 : 0) | (c >= L ? 2 : 0) | (d >= L ? 1 : 0);
+    if (k === 0 || k === 15) continue;
+    const e = n => n === 0 ? [i + (L - a) / (b - a), j] : n === 1 ? [i + 1, j + (L - b) / (c - b)] : n === 2 ? [i + (L - d) / (c - d), j + 1] : [i, j + (L - a) / (d - a)];
+    for (const [p, q] of T[k]) { const A = e(p), B = e(q); seg(A[0], A[1], B[0], B[1]); }
+  }
+}
+
+function drawField(g, box, vals, nx, ny, levels, colors) {
+  const img = g.createImageData(nx, ny);
+  for (let k = 0; k < nx * ny; k++) {
+    const v = vals[k]; let b = -1;
+    for (let l = 0; l < levels.length; l++) if (v >= levels[l]) b = l; else break;
+    if (b >= 0) { const c = colors[b]; img.data[4 * k] = c[0]; img.data[4 * k + 1] = c[1]; img.data[4 * k + 2] = c[2]; img.data[4 * k + 3] = 215; }
+  }
+  const off = document.createElement("canvas"); off.width = nx; off.height = ny; off.getContext("2d").putImageData(img, 0, 0);
+  g.imageSmoothingEnabled = true; g.drawImage(off, box.x, box.y, box.w, box.h);
+  const sx = box.w / (nx - 1), sy = box.h / (ny - 1);
+  levels.forEach((L, l) => {
+    g.beginPath();
+    marching(vals, nx, ny, L, (x1, y1, x2, y2) => { g.moveTo(box.x + x1 * sx, box.y + y1 * sy); g.lineTo(box.x + x2 * sx, box.y + y2 * sy); });
+    g.strokeStyle = rgb(colors[l].map(c => Math.min(255, c + 50)), 0.95); g.lineWidth = 1; g.stroke();
+  });
+}
+
+function legend(el, levels, colors, unit) {
+  el.innerHTML = levels.map((L, i) => `<span><i style="background:${rgb(colors[i])}"></i>${L >= 1000 ? fmt(L / 1000, L % 1000 ? 1 : 0) + "k" : fmt(L, L < 1 ? 2 : (L < 10 && L % 1 ? 1 : 0))}</span>`).join("") + `<span>${unit}</span>`;
+}
+
+// ---------- iso-candela ----------
+function isoView() {
+  const R = +$("isoRange").value, low = S.cfg.beam === "low";
+  const V = low ? ({ 20: [-6, 4], 40: [-10, 6], 60: [-15, 8] })[R] : ({ 20: [-8, 8], 40: [-12, 10], 60: [-15, 12] })[R];
+  return { h0: -R, h1: R, v0: V[0], v1: V[1] };
+}
+function drawIso() {
+  const cv = $("isoCv"), { g, w, h } = setupCanvas(cv, 0.42), view = isoView();
+  const m = { l: 40, r: 12, t: 12, b: 26 }, box = { x: m.l, y: m.t, w: w - m.l - m.r, h: h - m.t - m.b };
+  S.isoBox = box; S.isoView = view;
+  g.fillStyle = css("--plot-bg"); g.fillRect(0, 0, w, h);
+  const lx = $("isoUnit").value === "lx", k = lx ? 1 / 625 : 1, imax = S.res.imax;
+  const base = S.cfg.beam === "low" ? [100, 250, 625, 1250, 2500, 5000, 10000, 15000, 20000, 30000, 40000, 60000, 80000] : [500, 1000, 2500, 5000, 10000, 20000, 40000, 60000, 80000, 100000, 150000, 200000];
+  const lv = base.filter(L => L < imax * 0.98);
+  const colors = lv.map((_, i) => cmap(lv.length > 1 ? i / (lv.length - 1) : 1).map(Math.round));
+  const nx = Math.min(560, Math.round(box.w)), ny = Math.min(300, Math.round(box.h));
+  const vals = new Float32Array(nx * ny);
+  for (let j = 0; j < ny; j++) { const v = view.v1 - j * (view.v1 - view.v0) / (ny - 1); for (let i = 0; i < nx; i++) vals[j * nx + i] = Idisp(view.h0 + i * (view.h1 - view.h0) / (nx - 1), v); }
+  drawField(g, box, vals, nx, ny, lv, colors);
+  const X = hh => box.x + (hh - view.h0) / (view.h1 - view.h0) * box.w, Y = vv => box.y + (view.v1 - vv) / (view.v1 - view.v0) * box.h;
+  // grid + axes
+  g.font = "11px " + css("--f-mono"); g.fillStyle = css("--plot-dim"); g.textAlign = "center";
+  const hs = view.h1 > 40 ? 10 : 5, vs = (view.v1 - view.v0) > 16 ? 4 : 2;
+  for (let a = Math.ceil(view.h0 / hs) * hs; a <= view.h1; a += hs) { g.strokeStyle = a === 0 ? css("--plot-axis") : css("--plot-grid"); g.beginPath(); g.moveTo(X(a) + .5, box.y); g.lineTo(X(a) + .5, box.y + box.h); g.stroke(); g.fillText(a === 0 ? "V" : Math.abs(a) + (a < 0 ? "L" : "R"), X(a), h - 8); }
+  g.textAlign = "right";
+  for (let a = Math.ceil(view.v0 / vs) * vs; a <= view.v1; a += vs) { g.strokeStyle = a === 0 ? css("--plot-axis") : css("--plot-grid"); g.beginPath(); g.moveTo(box.x, Y(a) + .5); g.lineTo(box.x + box.w, Y(a) + .5); g.stroke(); g.fillText(a === 0 ? "H" : Math.abs(a) + (a > 0 ? "U" : "D"), box.x - 6, Y(a) + 4); }
+  g.save(); g.beginPath(); g.rect(box.x, box.y, box.w, box.h); g.clip();
+  const mir = S.cfg.lht ? -1 : 1;
+  if (S.cfg.beam === "low") {
+    g.setLineDash([5, 4]); g.strokeStyle = "rgba(255,255,255,.55)"; g.lineWidth = 1; g.beginPath();
+    for (let a = view.h0; a <= view.h1; a += 0.1) { const yv = cutoffV(S.cfg.cut, mir * a); a === view.h0 ? g.moveTo(X(a), Y(yv)) : g.lineTo(X(a), Y(yv)); }
+    g.stroke(); g.setLineDash([]);
+  }
+  if ($("isoPts").checked) {
+    const pass = css("--pass"), fail = css("--fail");
+    const status = {}; S.res.rows.forEach(r => { if (status[r.id] !== false) status[r.id] = r.pass; });
+    S.cfg.table.forEach(e => {
+      if (e.zone) {
+        g.beginPath(); e.zone.forEach((p, i) => i ? g.lineTo(X(mir * p[0]), Y(p[1])) : g.moveTo(X(mir * p[0]), Y(p[1]))); g.closePath();
+        g.strokeStyle = status[e.id] === false ? fail : "rgba(255,255,255,.35)"; g.setLineDash([2, 3]); g.stroke(); g.setLineDash([]);
+        g.fillStyle = "rgba(255,255,255,.6)"; g.textAlign = "left"; g.font = "10px " + css("--f-mono");
+        const p0 = e.zone[0]; g.fillText(e.id, X(mir * p0[0]) + (mir > 0 ? 3 : -40), Y(p0[1]) - 3);
+      }
+    });
+    S.cfg.table.forEach(e => {
+      if (e.h == null || e.zone) return;
+      const st = status[e.id], x = X(mir * e.h), y = Y(e.v);
+      g.beginPath(); g.arc(x, y, 3.5, 0, 7);
+      g.fillStyle = st === false ? fail : st === true ? pass : "#9fb0bd"; g.fill(); g.strokeStyle = "#0d151d"; g.lineWidth = 1; g.stroke();
+      g.fillStyle = "#e6eef4"; g.font = "10px " + css("--f-mono"); g.textAlign = "left"; g.fillText(e.id, x + 5, y - 4);
+    });
+  }
+  // hot spot
+  g.strokeStyle = "#fff"; g.lineWidth = 1.2; const hx = X(mir * S.res.hMax), hy = Y(S.res.vMax);
+  g.beginPath(); g.moveTo(hx - 6, hy); g.lineTo(hx + 6, hy); g.moveTo(hx, hy - 6); g.lineTo(hx, hy + 6); g.stroke();
+  g.restore();
+  legend($("isoLeg"), lv.map(L => L * k), colors, lx ? "lx @25 m" : "cd");
+}
+
+// ---------- road ----------
+function roadView() {
+  const R = +$("roadRange").value, W = R <= 150 ? 20 : 30;
+  return { x0: 0, x1: R, y0: -W, y1: W };
+}
+function drawRoad() {
+  const cv = $("roadCv"), { g, w, h } = setupCanvas(cv, 0.42), view = roadView();
+  const m = { l: 40, r: 12, t: 12, b: 26 }, box = { x: m.l, y: m.t, w: w - m.l - m.r, h: h - m.t - m.b };
+  S.roadBox = box; S.roadView = view;
+  g.fillStyle = css("--plot-bg"); g.fillRect(0, 0, w, h);
+  const vert = $("plane").value === "vertical";
+  const lv = vert ? [0.5, 1, 3, 5, 10, 20, 50, 100] : [0.25, 0.5, 1, 2, 3, 5, 10, 20, 50];
+  const colors = lv.map((_, i) => cmap(i / (lv.length - 1)).map(Math.round));
+  const nx = Math.min(480, Math.round(box.w)), ny = Math.min(240, Math.round(box.h));
+  const vals = new Float32Array(nx * ny);
+  // screen row j: top = left side of the road (y negative), bottom = right side (y positive)
+  for (let j = 0; j < ny; j++) { const y = view.y0 + j * (view.y1 - view.y0) / (ny - 1); for (let i = 0; i < nx; i++) { const x = Math.max(0.5, view.x0 + i * (view.x1 - view.x0) / (nx - 1)); vals[j * nx + i] = luxDisp(x, y); } }
+  drawField(g, box, vals, nx, ny, lv, colors);
+  const X = x => box.x + (x - view.x0) / (view.x1 - view.x0) * box.w, Y = y => box.y + (y - view.y0) / (view.y1 - view.y0) * box.h;
+  g.font = "11px " + css("--f-mono"); g.fillStyle = css("--plot-dim"); g.textAlign = "center";
+  const xs = view.x1 > 200 ? 50 : 25;
+  for (let a = 0; a <= view.x1; a += xs) { g.strokeStyle = css("--plot-grid"); g.beginPath(); g.moveTo(X(a) + .5, box.y); g.lineTo(X(a) + .5, box.y + box.h); g.stroke(); g.fillText(a + (a === view.x1 - (view.x1 % xs) ? " m" : ""), X(a), h - 8); }
+  g.textAlign = "right";
+  const ys = view.y1 > 20 ? 10 : 5;
+  for (let a = view.y0; a <= view.y1; a += ys) { g.strokeStyle = a === 0 ? css("--plot-axis") : css("--plot-grid"); g.beginPath(); g.moveTo(box.x, Y(a) + .5); g.lineTo(box.x + box.w, Y(a) + .5); g.stroke(); g.fillText(a === 0 ? "0" : Math.abs(a) + (a > 0 ? "R" : "L"), box.x - 6, Y(a) + 4); }
+  g.save(); g.beginPath(); g.rect(box.x, box.y, box.w, box.h); g.clip();
+  // lane markings (display frame)
+  const L = S.cfg.lane, side = S.cfg.lht ? -1 : 1;
+  const line = (y, dash) => { g.setLineDash(dash); g.strokeStyle = "rgba(255,255,255,.7)"; g.lineWidth = 1.4; g.beginPath(); g.moveTo(box.x, Y(y)); g.lineTo(box.x + box.w, Y(y)); g.stroke(); g.setLineDash([]); };
+  line(side * L / 2, []); line(-side * L / 2, [10, 8]); line(-side * 1.5 * L, []);
+  // vehicle
+  g.fillStyle = "#e6eef4"; g.fillRect(X(0) - 1, Y(-0.9), 4, Y(0.9) - Y(-0.9));
+  if ($("roadPts").checked) {
+    const pass = css("--pass"), fail = css("--fail");
+    S.res.roadRows.forEach(r => {
+      const c = r.check, col = r.pass === false ? fail : r.pass ? pass : "#9fb0bd";
+      g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 1.6; g.font = "10px " + css("--f-body"); g.textAlign = "left";
+      let lx, ly;
+      if (c.type === "point") {
+        const x = X(c.x), y = Y(c.y); g.beginPath(); g.rect(x - 3.5, y - 3.5, 7, 7); g.fill(); g.strokeStyle = "#0d151d"; g.lineWidth = 1; g.stroke(); lx = x + 6; ly = y - 5;
+      } else if (c.type === "range") {
+        const y = Y(c.y), lim = c.min ?? c.max;
+        g.setLineDash([3, 3]); g.beginPath(); g.moveTo(X(0), y); g.lineTo(X(Math.min(r.reach || 0, view.x1)), y); g.stroke(); g.setLineDash([]);
+        if (lim != null) { g.beginPath(); g.moveTo(X(lim), y - 6); g.lineTo(X(lim), y + 6); g.stroke(); }
+        if (r.reach) { g.beginPath(); g.arc(X(Math.min(r.reach, view.x1)), y, 3.5, 0, 7); g.fill(); }
+        lx = X(Math.min(r.reach || lim || 0, view.x1)) + 6; ly = y - 5;
+      } else if (c.type === "width") {
+        const x = X(c.x);
+        if (r.span) { g.beginPath(); g.moveTo(x, Y(r.span[0])); g.lineTo(x, Y(r.span[1])); g.stroke(); [0, 1].forEach(k => { g.beginPath(); g.moveTo(x - 5, Y(r.span[k])); g.lineTo(x + 5, Y(r.span[k])); g.stroke(); }); }
+        lx = x + 6; ly = Y(r.span ? r.span[0] : 0) - 5;
+      } else if (c.type === "zone") {
+        g.setLineDash([5, 3]); g.strokeRect(X(c.x1), Y(c.y1), X(c.x2) - X(c.x1), Y(c.y2) - Y(c.y1)); g.setLineDash([]);
+        lx = X(c.x1) + 3; ly = Y(c.y1) - 4;
+      }
+      g.fillStyle = "#e6eef4"; g.fillText(r.id, lx, ly);
+    });
+  }
+  g.restore();
+  legend($("roadLeg"), lv, colors, "lx");
+}
+
+// ---------- pointer readouts ----------
+function hookRead(cv, which) {
+  const handler = ev => {
+    if (!S.res) return;
+    const r = cv.getBoundingClientRect(), px = ev.clientX - r.left, py = ev.clientY - r.top;
+    const box = which === "iso" ? S.isoBox : S.roadBox; if (!box) return;
+    const u = (px - box.x) / box.w, v = (py - box.y) / box.h;
+    if (u < 0 || u > 1 || v < 0 || v > 1) return;
+    if (which === "iso") {
+      const vw = S.isoView, hh = vw.h0 + u * (vw.h1 - vw.h0), vv = vw.v1 - v * (vw.v1 - vw.v0), I = Idisp(hh, vv);
+      $("isoRead").textContent = `H ${angH(hh)}  V ${angV(vv)}   ${fmtCd(I)} cd · ${fmt(I / 625, 2)} lx @25 m`;
+    } else {
+      const vw = S.roadView, x = vw.x0 + u * (vw.x1 - vw.x0), y = vw.y0 + v * (vw.y1 - vw.y0);
+      $("roadRead").textContent = `x ${fmt(x, 1)} m  y ${fmt(Math.abs(y), 1)} m ${y >= 0 ? "R" : "L"}   ${fmt(luxDisp(Math.max(0.5, x), y), 2)} lx (${$("plane").value === "vertical" ? "vertical plane" : "road surface"})`;
+    }
+  };
+  cv.addEventListener("pointermove", handler); cv.addEventListener("pointerdown", handler);
+}
+hookRead($("isoCv"), "iso"); hookRead($("roadCv"), "road");
+
+// ---------- summary + tables ----------
+function kv(label, value, sub, cls) { return `<div class="kv ${cls || ""}"><b>${label}</b><span>${value}</span>${sub ? `<em>${sub}</em>` : ""}</div>`; }
+function req(r, unit) { const p = []; if (r.min != null) p.push("≥ " + (unit === "lx" ? fmt(r.min, 2) : fmtCd(r.min))); if (r.max != null) p.push("≤ " + (unit === "lx" ? fmt(r.max, 2) : fmtCd(r.max))); return p.join(", ") || "info"; }
+function pill(p) { return p === true ? '<span class="pill p">PASS</span>' : p === false ? '<span class="pill f">FAIL</span>' : '<span class="pill i">INFO</span>'; }
+
+function renderSummary() {
+  const r = S.res, c = S.cfg, t = c.targets, nf = r.rows.filter(x => x.pass === false).length, n = r.rows.filter(x => x.pass != null).length;
+  const nr = r.roadRows.filter(x => x.pass === false).length, nrt = r.roadRows.filter(x => x.pass != null).length;
+  const asked = (v, d, u) => c.mode === "param" && v ? `requested ${fmt(v, d)}${u}` : "";
+  const mir = c.lht ? -1 : 1;
+  const r1 = reach(1), r3 = reach(3);
+  $("summary").innerHTML =
+    kv("ECE verdict", nf ? `${nf} of ${n} fail` : `PASS ${n}/${n}`, c.beam === "low" ? "passing beam" : "driving beam", "verdict " + (nf ? "bad" : "ok")) +
+    kv("Road checks", nrt ? (nr ? `${nr} of ${nrt} missed` : `met ${nrt}/${nrt}`) : "none", c.mode === "road" ? "solved for" : "checked only", "verdict " + (nr ? "bad" : "ok")) +
+    kv("Imax", fmt(r.imax) + " cd", asked(t.imax, 0, " cd")) +
+    kv("Flux", fmt(r.flux) + " lm", asked(t.flux, 0, " lm")) +
+    kv("H spread", "±" + fmt(r.sp.spreadH, 1) + "°", asked(t.spreadH, 1, "°") || `${angH(mir < 0 ? -r.sp.right : r.sp.left)} … ${angH(mir < 0 ? -r.sp.left : r.sp.right)}`) +
+    kv("V spread", fmt(r.sp.spreadV, 1) + "°", asked(t.spreadV, 1, "°")) +
+    kv("Hot spot", `${angH(mir * r.hMax)} ${angV(r.vMax)}`, "position of Imax") +
+    kv("Reach 1 lx / 3 lx", `${r1 ? fmt(r1) : "—"} / ${r3 ? fmt(r3) : "—"} m`, ($("plane").value === "vertical" ? "vertical plane" : "road surface") + ", centreline");
+  if ($("regLine")) $("regLine").textContent = `${PRESET_TABLES[c.beam].name.replace(/ (passing|driving) beam/, "")} · ${c.beam === "low" ? "low beam" : "high beam"} · ${c.lht ? "LHT (mirrored)" : "RHT"}`;
+}
+
+function renderTables() {
+  const mir = S.cfg.lht ? -1 : 1;
+  $("tblName").textContent = PRESET_TABLES[S.cfg.beam].name;
+  $("ecTbl").innerHTML = "<thead><tr><th>Point</th><th>Position</th><th>Requirement (cd)</th><th>Value (cd)</th><th>Margin</th><th></th></tr></thead><tbody>" +
+    S.res.rows.map(r => {
+      const pos = r.zone ? "zone " + (r.min != null ? "min" : "max") : r.kind === "sum" ? "sum" : r.h != null ? `${angH(mir * r.h)} ${angV(r.v)}` : "global";
+      return `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>${pos}</td><td class="n">${req(r)}</td><td class="n">${fmtCd(r.val)}</td><td class="n">${r.margin == null ? "" : fmt(100 * r.margin, 0) + " %"}</td><td>${pill(r.pass)}</td></tr>`;
+    }).join("") + "</tbody>";
+  $("roadMode").textContent = S.cfg.mode === "road" ? "solved for, lamp pair" : (S.res.roadRows.length ? "checked, not solved for" : "");
+  const side = y => Math.abs(y) < 0.005 ? "axis" : `${fmt(Math.abs(y), 2)} ${y > 0 ? "R" : "L"}`;
+  const where = c => c.type === "point" ? `${fmt(c.x)} m, ${side(c.y)}`
+    : c.type === "range" ? `along ${side(c.y)}, ${fmt(c.thr, 2)} lx`
+    : c.type === "width" ? `at ${fmt(c.x)} m, ${fmt(c.thr, 2)} lx`
+    : `${fmt(c.x1)}–${fmt(c.x2)} m, ${fmt(Math.abs(c.y1), 2)}${c.y1 >= 0 ? "R" : "L"}–${fmt(Math.abs(c.y2), 2)}${c.y2 >= 0 ? "R" : "L"}, ${c.stat}`;
+  const vfmt = r => r.unit === "m" ? (r.check.type === "range" && r.reach == null ? "not reached" : fmt(r.val, 1) + " m") : fmt(r.val, 2) + " lx";
+  const rq = r => (r.min != null ? "≥ " + fmt(r.min, r.unit === "m" ? 0 : 2) : "≤ " + fmt(r.max, r.unit === "m" ? 0 : 2)) + " " + r.unit;
+  $("rdTbl").innerHTML = S.res.roadRows.length ? "<thead><tr><th>Check</th><th>Type</th><th>Where</th><th>Requirement</th><th>Value</th><th></th></tr></thead><tbody>" +
+    S.res.roadRows.map(r => `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>${r.check.type}</td><td>${where(r.check)}${r.check.zEval ? `, z ${fmt(r.check.zEval, 2)} m` : ""}</td><td class="n">${rq(r)}</td><td class="n">${vfmt(r)}</td><td>${pill(r.pass)}</td></tr>`).join("") + "</tbody>"
+    : `<tbody><tr><td class="note" style="white-space:normal">No road checks for this beam function. Switch to Road requirement mode or paste a requirement set.</td></tr></tbody>`;
+}
+
+function recomputeRoad() {
+  // re-check with the method currently selected (it can change after solving)
+  const c = S.cfg;
+  const rd = compileRoad({ checks: c.checks, height: c.H, spacing: c.sp, plane: $("plane").value, traffic: c.lht ? "LHT" : "RHT", evalH: c.evalH }, c.beam, c.cut);
+  S.res.roadRows = rd.map(rc => roadRow(rc, checkValue(S.P, rc)));
+}
+
+function renderAll() { if (!S.res) return; recomputeRoad(); renderSummary(); renderTables(); drawIso(); drawRoad(); }
+["isoUnit", "isoRange", "isoPts"].forEach(id => $(id).addEventListener("change", () => S.res && drawIso()));
+["roadRange", "roadPts"].forEach(id => $(id).addEventListener("change", () => S.res && drawRoad()));
+$("plane").addEventListener("change", () => S.res && renderAll());
+let rz; new ResizeObserver(() => { clearTimeout(rz); rz = setTimeout(() => S.res && (drawIso(), drawRoad()), 120); }).observe(document.querySelector("main"));
+const redrawTheme = () => S.res && (drawIso(), drawRoad());
+try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redrawTheme); } catch (e) { }
+new MutationObserver(redrawTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+// ---------- export ----------
+function buildIES() {
+  if (!S.res) return "";
+  const range = (a, b, s) => { const o = []; for (let x = a; x <= b + 1e-9; x += s) o.push(+x.toFixed(2)); return o; };
+  const V = [...range(-40, -11, 1), ...range(-10, 5, 0.1), ...range(6, 40, 1)];
+  const H = [...range(-90, -32, 2), ...range(-30, 30, 0.5), ...range(32, 90, 2)];
+  const c = S.cfg, lines = [
+    "IESNA:LM-63-2002",
+    "[TEST] Synthetic beam (not measured)",
+    "[MANUFAC] Beam Synth",
+    `[LUMINAIRE] ${c.beam === "low" ? "Low beam (passing)" : "High beam (driving)"} ${c.lht ? "LHT" : "RHT"}`,
+    `[_IMAX] ${Math.round(S.res.imax)} cd`, `[_FLUX] ${Math.round(S.res.flux)} lm`,
+    `[_GENERATED] ${new Date().toISOString().slice(0, 10)}`,
+    "TILT=NONE",
+    `1 -1 1 ${V.length} ${H.length} 2 2 0 0 0`, "1 1 0"];
+  const wrap = arr => { const o = []; for (let i = 0; i < arr.length; i += 10) o.push(arr.slice(i, i + 10).join(" ")); return o; };
+  lines.push(...wrap(V), ...wrap(H));
+  for (const h of H) lines.push(...wrap(V.map(v => Math.round(Idisp(h, v) * 10) / 10)));
+  return lines.join("\n") + "\n";
+}
+$("riCopy").onclick = () => {
+  let set = [];
+  try { const j = JSON.parse($("roadJson").value); set = toRoadIlluminate(normalizeChecks(Array.isArray(j) ? j : (j.checks || j.points || []))); } catch (e) { msg("Road JSON: " + e.message, true); return; }
+  const txt = JSON.stringify(set, null, 2); $("iesOut").value = txt; copy(txt, $("riCopy"));
+};
+$("iesBuild").onclick = () => { $("iesOut").value = buildIES(); };
+async function copy(text, btn) {
+  const orig = btn.textContent;
+  try { await navigator.clipboard.writeText(text); btn.textContent = "Copied"; }
+  catch (e) { $("iesOut").value = text; $("iesOut").focus(); $("iesOut").select(); btn.textContent = "Selected, press Ctrl+C"; }
+  setTimeout(() => btn.textContent = orig, 1800);
+}
+$("iesCopy").onclick = () => { if (!S.res) return; if (!$("iesOut").value) $("iesOut").value = buildIES(); copy($("iesOut").value, $("iesCopy")); };
+$("paramCopy").onclick = () => {
+  if (!S.P) return;
+  const r2 = x => Math.round(x * 1000) / 1000;
+  const o = { function: S.cfg.beam, traffic: S.cfg.lht ? "LHT" : "RHT", note: "Internal frame is RHT; LHT mirrors H.", cutoff: S.cfg.beam === "low" ? S.cfg.cut : null,
+    lobes: S.P.comps.map((c, i) => ({ name: ["hot spot", "spread", "foreground"][i], A_cd: Math.round(c.A), h_deg: r2(c.h), v_deg: r2(c.v), sigmaH_deg: r2(c.sh), sigmaV_deg: r2(c.sv) })),
+    glareFloor_cd: S.cfg.beam === "low" ? Math.round(S.P.sigA) : 0 };
+  const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy"));
+};
+
+// ---------- start ----------
+showTable();
+setTimeout(generate, 50);
+})();
+
+</script>
+
+</body>
+</html>

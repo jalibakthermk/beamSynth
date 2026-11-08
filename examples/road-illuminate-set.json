@@ -1,0 +1,46 @@
+[
+  {
+    "label": "Ego lane 50 m",
+    "type": "point",
+    "x": 50,
+    "y": 0,
+    "op": ">=",
+    "limit": 8
+  },
+  {
+    "label": "Reach on vehicle axis, 3 lx",
+    "type": "range",
+    "y": 0,
+    "thr": 3,
+    "op": ">=",
+    "limit": 75
+  },
+  {
+    "label": "Kerb-side reach, 1 lx along right edge",
+    "type": "range",
+    "y": -1.75,
+    "thr": 1,
+    "op": ">=",
+    "limit": 90
+  },
+  {
+    "label": "Foreground spread, 1 lx width at 20 m",
+    "type": "width",
+    "x": 20,
+    "thr": 1,
+    "op": ">=",
+    "limit": 25
+  },
+  {
+    "label": "Oncoming driver eye, 50-100 m",
+    "type": "zone",
+    "x1": 50,
+    "x2": 100,
+    "y1": 1.75,
+    "y2": 5.25,
+    "stat": "max",
+    "z": 1.1,
+    "op": "<=",
+    "limit": 0.6
+  }
+]

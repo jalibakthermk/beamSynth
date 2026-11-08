@@ -1,0 +1,260 @@
+<title>Beam Synth</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: instrument bench — input rail on the left, two dark "screens" (goniometer + road) on the right, results below. */
+:root{
+  --bg:#eef1f3; --surface:#ffffff; --sunk:#e4e9ec; --ink:#14202b; --muted:#566774; --line:#d3dbe1;
+  --accent:#a95f00; --accent-ink:#ffffff; --accent-soft:#f6e6cf;
+  --pass:#22804a; --fail:#c3352b; --info:#6b7b88;
+  --plot-bg:#0d151d; --plot-ink:#c7d4de; --plot-dim:#7d8d9a; --plot-grid:rgba(199,212,222,.13); --plot-axis:rgba(199,212,222,.45);
+  --f-display:"Saira Semi Condensed","Arial Narrow",sans-serif;
+  --f-body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0a1016; --surface:#111a22; --sunk:#0d151c; --ink:#e1e8ee; --muted:#8c9daa; --line:#22313d;
+  --accent:#f0a43a; --accent-ink:#1b1206; --accent-soft:#3a2a12;
+  --pass:#4cc27a; --fail:#ff6b5d; --info:#8c9daa; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0a1016; --surface:#111a22; --sunk:#0d151c; --ink:#e1e8ee; --muted:#8c9daa; --line:#22313d;
+  --accent:#f0a43a; --accent-ink:#1b1206; --accent-soft:#3a2a12;
+  --pass:#4cc27a; --fail:#ff6b5d; --info:#8c9daa; color-scheme:dark;}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1380px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px;border-bottom:1px solid var(--line);padding-bottom:12px}
+h1{font-family:var(--f-display);font-weight:700;font-size:30px;letter-spacing:.01em;margin:0;line-height:1.05;text-wrap:balance}
+h1 span{color:var(--accent)}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:46px;height:46px;flex:none}
+.sub{color:var(--muted);margin:4px 0 0;max-width:62ch}
+.reg{font-family:var(--f-mono);font-size:12px;color:var(--muted);text-align:right}
+.bench{display:grid;grid-template-columns:minmax(300px,360px) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.bench{grid-template-columns:minmax(0,1fr)}}
+aside{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--sunk);border-radius:5px;padding:3px;gap:3px}
+.seg button{font:600 13px var(--f-body);border:0;border-radius:4px;padding:8px 6px;background:transparent;color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.lab{font:600 11px var(--f-display);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0}
+fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:9px;min-width:0}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--muted);min-width:0}
+label.f small{font-size:11.5px;color:var(--muted);opacity:.85}
+input,select,textarea{font:14px var(--f-body);color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:7px 8px;width:100%;min-width:0}
+input[type=number]{font-family:var(--f-mono);font-size:13.5px}
+textarea{font:12px/1.45 var(--f-mono);resize:vertical;white-space:pre;overflow:auto;tab-size:2}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btnrow{display:flex;flex-wrap:wrap;gap:6px}
+.btn{font:600 13px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:6px 10px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.go{font:700 16px var(--f-display);letter-spacing:.04em;background:var(--accent);color:var(--accent-ink);border:0;border-radius:5px;padding:11px;cursor:pointer;width:100%}
+.go:disabled{opacity:.6;cursor:progress}
+.prog{height:4px;background:var(--sunk);border-radius:2px;overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .1s}
+.msg{font-size:13px;color:var(--muted);min-height:1.2em}
+.msg.err{color:var(--fail)}
+details{border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;font:600 12px var(--f-display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+details>div{margin-top:10px;display:flex;flex-direction:column;gap:9px}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+main{display:flex;flex-direction:column;gap:18px;min-width:0}
+.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.kv{background:var(--surface);padding:10px 12px;min-width:0}
+.kv b{display:block;font:600 11px var(--f-display);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.kv span{font:500 18px var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.kv em{display:block;font-style:normal;font-size:12px;color:var(--muted)}
+.verdict span{font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:.03em}
+.ok{color:var(--pass)} .bad{color:var(--fail)}
+.screen{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden;min-width:0}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.bar h2{font:700 17px var(--f-display);margin:0 auto 0 0;letter-spacing:.02em}
+.bar label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.bar select{width:auto;padding:4px 6px;font-size:13px}
+.bar input[type=checkbox]{width:auto}
+.cv{position:relative;background:var(--plot-bg)}
+.cv canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
+.foot{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--plot-bg);color:var(--plot-ink);border-top:1px solid rgba(255,255,255,.06)}
+.readout{font:12.5px var(--f-mono);font-variant-numeric:tabular-nums;min-height:1.4em}
+.legend{display:flex;flex-wrap:wrap;gap:4px 10px;font:11.5px var(--f-mono);color:var(--plot-dim)}
+.legend i{display:inline-block;width:12px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.tables{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:18px}
+@media (max-width:1500px){.tables{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.kv span{font-size:16px}}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font:600 11px var(--f-display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums}
+td.n{font-family:var(--f-mono);font-size:12.5px;text-align:right}
+td.id{font-weight:600}
+.pill{display:inline-block;font:700 11px var(--f-display);letter-spacing:.08em;padding:2px 7px;border-radius:3px}
+.pill.p{background:color-mix(in srgb,var(--pass) 16%,transparent);color:var(--pass)}
+.pill.f{background:color-mix(in srgb,var(--fail) 16%,transparent);color:var(--fail)}
+.pill.i{background:var(--sunk);color:var(--info)}
+tr.fail td{background:color-mix(in srgb,var(--fail) 6%,transparent)}
+.export{padding:12px;display:flex;flex-direction:column;gap:10px}
+.export textarea{height:150px}
+footer{color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding-top:10px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px}
+@media (prefers-reduced-motion:reduce){.prog i{transition:none}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 48 48" aria-hidden="true">
+  <defs><clipPath id="lbClip"><path d="M3 25 H22 L31 18 H45 V44 H3 Z"/></clipPath></defs>
+  <rect x="1.5" y="1.5" width="45" height="45" rx="9" fill="var(--plot-bg)"/>
+  <g clip-path="url(#lbClip)">
+    <ellipse cx="25" cy="28" rx="20" ry="9" fill="#1c5c8c"/>
+    <ellipse cx="26" cy="27.5" rx="14" ry="6.2" fill="#179498"/>
+    <ellipse cx="27" cy="27" rx="9" ry="4.2" fill="#d6d046"/>
+    <ellipse cx="27.5" cy="26.6" rx="4.6" ry="2.4" fill="#e24e3a"/>
+  </g>
+  <path d="M5 25 H22 L31 18 H43" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(36 37)" fill="var(--accent)">
+    <circle r="5.2"/>
+    <g stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round">
+      <path d="M0 -7.2V7.2M-7.2 0H7.2M-5.1 -5.1L5.1 5.1M-5.1 5.1L5.1 -5.1"/>
+    </g>
+    <circle r="2" fill="var(--plot-bg)"/>
+  </g>
+</svg>
+    <h1>Beam <span>Synth</span></h1>
+  </div>
+</header>
+
+<div class="bench">
+<aside>
+  <div class="seg" role="group" aria-label="Input mode">
+    <button id="mRoad" aria-pressed="false">Road requirement</button>
+    <button id="mParam" aria-pressed="true">Beam parameters</button>
+  </div>
+
+  <fieldset id="paramPanel">
+    <p class="lab">Beam parameters</p>
+    <label class="f">Beam function
+      <select id="fn"><option value="low">Low beam (passing)</option><option value="high">High beam (driving)</option></select>
+    </label>
+    <div class="row2">
+      <label class="f">Maximum intensity (cd)<input id="imax" type="number" step="500" value="30000"></label>
+      <label class="f">Luminous flux (lm)<input id="flux" type="number" step="10" value="800"></label>
+    </div>
+    <div class="row2">
+      <label class="f">H spread (±°)<input id="sph" type="number" step="0.5" value="14"><small>half-width at 5 % Imax</small></label>
+      <label class="f">V spread (°)<input id="spv" type="number" step="0.5" value="4"><small>height at 5 % Imax</small></label>
+    </div>
+  </fieldset>
+
+  <fieldset id="roadPanel" hidden>
+    <p class="lab">Road requirement (JSON)</p>
+    <textarea id="roadJson" rows="18" spellcheck="false" aria-label="Road requirement JSON"></textarea>
+    <div class="btnrow">
+      <button class="btn" id="exLow">Low-beam example</button>
+      <button class="btn" id="exHigh">High-beam example</button>
+    </div>
+    <p class="note">Paste a road-illuminate requirement set as is, or wrap it as <code>"checks"</code> with vehicle settings. Check types: <code>point</code>, <code>range</code>, <code>width</code>, <code>zone</code>, with <code>op</code> and <code>limit</code>; <code>y</code> is positive to the left, as in road-illuminate. Optional <code>z</code> per check sets its evaluation height. Optional <code>targets</code>: <code>imax</code>, <code>flux_lm</code>, <code>spreadH_deg</code>, <code>spreadV_deg</code>.</p>
+  </fieldset>
+
+  <fieldset>
+    <p class="lab">Vehicle</p>
+    <div class="row2">
+      <label class="f">Traffic<select id="traffic"><option value="RHT">Right-hand (RHT)</option><option value="LHT">Left-hand (LHT)</option></select></label>
+      <label class="f">Mounting height (m)<input id="mh" type="number" step="0.01" value="0.65"></label>
+    </div>
+    <div class="row2">
+      <label class="f">Lamp spacing (m)<input id="sp" type="number" step="0.05" value="1.4"></label>
+      <label class="f">Evaluation height (m)<input id="evalH" type="number" step="0.05" min="0" value="0"></label>
+    </div>
+  </fieldset>
+
+  <details id="cutBox">
+    <summary>Cut-off geometry (low beam)</summary>
+    <div>
+      <div class="row2">
+        <label class="f">Elbow V (°)<input id="cElbow" type="number" step="0.01" value="-0.57"></label>
+        <label class="f">Shoulder angle (°)<input id="cAngle" type="number" step="1" value="15"></label>
+      </div>
+      <div class="row2">
+        <label class="f">Shoulder top V (°)<input id="cCap" type="number" step="0.05" value="0.5"></label>
+        <label class="f">Gradient width (°)<input id="cSharp" type="number" step="0.01" value="0.08"></label>
+      </div>
+      <p class="note">Elbow on the V-V line. Gradient width sets cut-off sharpness (logistic scale).</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Regulation test table</summary>
+    <div>
+      <p class="note" id="tableNote"></p>
+      <textarea id="tableJson" rows="14" spellcheck="false" aria-label="Regulation test table JSON"></textarea>
+      <div class="btnrow"><button class="btn" id="tableReset">Reset to preset</button></div>
+      <p class="note">Entries: point (<code>h</code>, <code>v</code>), <code>zone</code> polygon, <code>sum</code> of point ids, or <code>imax</code>. Limits: <code>min</code>, <code>max</code>, <code>minRatioImax</code>, <code>maxRef {id,k}</code>. Always written for RHT; LHT is mirrored.</p>
+    </div>
+  </details>
+
+  <button class="go" id="go">Generate beam</button>
+  <div class="prog" aria-hidden="true"><i id="progBar"></i></div>
+  <p class="msg" id="msg"></p>
+</aside>
+
+<main>
+  <section class="summary" id="summary" aria-label="Result summary"></section>
+
+  <section class="screen">
+    <div class="bar">
+      <h2>Iso-candela</h2>
+      <label>Unit <select id="isoUnit"><option value="cd">cd</option><option value="lx">lx at 25 m</option></select></label>
+      <label>Range <select id="isoRange"><option value="20">±20°</option><option value="40" selected>±40°</option><option value="60">±60°</option></select></label>
+      <label><input type="checkbox" id="isoPts" checked> Test points</label>
+    </div>
+    <div class="cv"><canvas id="isoCv" aria-label="Iso-candela plot of the synthetic beam"></canvas></div>
+    <div class="foot"><div class="readout" id="isoRead">Hover or touch the plot to read intensity</div><div class="legend" id="isoLeg"></div></div>
+  </section>
+
+  <section class="screen">
+    <div class="bar">
+      <h2>Road illumination</h2>
+      <label>Method <select id="plane"><option value="vertical">Vertical planes on road</option><option value="horizontal">Road surface</option></select></label>
+      <label>Range <select id="roadRange"><option value="100">100 m</option><option value="150" selected>150 m</option><option value="250">250 m</option><option value="400">400 m</option></select></label>
+      <label><input type="checkbox" id="roadPts" checked> Targets</label>
+    </div>
+    <div class="cv"><canvas id="roadCv" aria-label="Bird's-eye road isolux plot for the lamp pair"></canvas></div>
+    <div class="foot"><div class="readout" id="roadRead">Lamp pair, both lamps on</div><div class="legend" id="roadLeg"></div></div>
+  </section>
+
+  <div class="tables">
+    <section class="screen">
+      <div class="bar"><h2>ECE compliance</h2><span class="note" id="tblName"></span></div>
+      <div class="tbl"><table id="ecTbl"></table></div>
+    </section>
+    <section class="screen">
+      <div class="bar"><h2>Road checks</h2><span class="note" id="roadMode"></span></div>
+      <div class="tbl"><table id="rdTbl"></table></div>
+    </section>
+  </div>
+
+  <section class="screen">
+    <div class="bar"><h2>Export</h2><span class="note">IES LM-63-2002, photometric type B (H-V), absolute cd, one lamp</span></div>
+    <div class="export">
+      <div class="btnrow"><button class="btn" id="iesBuild">Build IES</button><button class="btn" id="iesCopy">Copy IES</button><button class="btn" id="paramCopy">Copy model parameters</button><button class="btn" id="riCopy">Copy checks for road-illuminate</button></div>
+      <textarea id="iesOut" readonly spellcheck="false" aria-label="IES output" placeholder="Build the IES file, then copy it into a .ies file."></textarea>
+    </div>
+  </section>
+</main>
+</div>
+
+<footer>
+  <span>Synthetic intensity model: three Gaussian lobes, logistic cut-off and a glare-floor term, fitted with an evolution-strategy solver.</span>
+  <span>© 2026 Jalib Akther</span>
+</footer>
+</div>
+
+<script>
+/*CORE*/
+</script>
+<script>
+/*UI*/
+</script>
