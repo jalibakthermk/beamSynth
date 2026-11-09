@@ -44,7 +44,16 @@ function setDefaults() {
   const cls = $("cls").value;
   const d = PARAM_DEFAULTS[S.beam + "_" + cls] || PARAM_DEFAULTS[S.beam + (cls === "B" ? "" : "_sym")];
   $("imax").value = d.imax; $("flux").value = d.flux; $("sph").value = d.sph; $("spv").value = d.spv;
+  setHotDefault();
 }
+// default hot spot: 75R / 75L (Class B), 0.86D-V (symmetric classes), H-V (high beam)
+function setHotDefault() {
+  const cls = $("cls").value, lht = $("traffic").value === "LHT";
+  const hot = S.beam === "high" ? [0, 0] : cls === "B" ? [lht ? -1.15 : 1.15, -0.57] : [0, -0.86];
+  $("hotH").value = hot[0]; $("hotV").value = hot[1];
+}
+$("traffic").addEventListener("change", setHotDefault);
+$("smile").addEventListener("input", () => { $("smileVal").textContent = (+$("smile").value).toFixed(2); });
 $("fn").onchange = () => {
   S.beam = $("fn").value; fillClasses(); setDefaults(); syncCut(); showTable();
 };
@@ -123,14 +132,19 @@ function gather() {
   } else {
     targets = { imax: num("imax"), flux: num("flux"), spreadH: num("sph"), spreadV: num("spv") };
     if (!targets.imax || !targets.flux || !targets.spreadH || !targets.spreadV) throw new Error("Fill in all four beam parameters.");
+    const hh = num("hotH"), hv = num("hotV");
+    if (hh == null || hv == null) throw new Error("Fill in the hot spot position (H and V).");
+    if (Math.abs(hh) > 10 || hv > 2 || hv < -6) throw new Error("Hot spot must be within 10° left or right, and between 2° up and 6° down.");
+    targets.hot = { h: ($("traffic").value === "LHT" ? -hh : hh), v: hv };   // internal frame is RHT
   }
   const lane = (road && !isSet && road.road && road.road.laneWidth_m) || 3.5;
   const evalH = Math.max(0, num("evalH") || 0);
+  const shape = S.mode === "param" ? { smile: +$("smile").value, hot: targets.hot } : null;
   const rfZone = { x1: Math.max(0, num("rfX1") ?? 0), x2: num("rfX2") ?? 100, left: Math.abs(num("rfYL") ?? 10), right: Math.abs(num("rfYR") ?? 10) };
   if (!(rfZone.x2 > rfZone.x1) || !(rfZone.left + rfZone.right > 0)) throw new Error("Flux on road zone: 'to' must be beyond 'from', and the width must be more than 0.");
   const rfTarget = num("rfT");
   const roadFlux = { zone: rfZone, target: rfTarget && rfTarget > 0 ? rfTarget : null, lamps: $("rfL").value, height: H, spacing: sp, traffic: lht ? "LHT" : "RHT" };
-  return { beam: S.beam, cls: $("cls").value, key: tableKey(), sym, cut, table, lht, H, sp, checks, evalH, targets, roadFlux, lane, mode: S.mode };
+  return { beam: S.beam, cls: $("cls").value, key: tableKey(), sym, cut, table, lht, H, sp, checks, evalH, targets, roadFlux, shape, lane, mode: S.mode };
 }
 
 function generate() {
@@ -141,14 +155,14 @@ function generate() {
   const t0 = performance.now();
   const ctx = buildContext({ beam: c.beam, cut: c.cut, table: c.table,
     road: { checks: c.checks, height: c.H, spacing: c.sp, plane: $("plane").value, traffic: c.lht ? "LHT" : "RHT", evalH: c.evalH },
-    useRoad: c.mode === "road", targets: c.targets, roadFlux: c.roadFlux });
+    useRoad: c.mode === "road", targets: c.targets, roadFlux: c.roadFlux, shape: c.shape });
   const u0 = encode(initPhysical(c.beam, c.targets, c.cut), c.beam);
   const iters = 2400, solver = makeSolver(ctx, u0, iters);
   const tick = () => {
     const done = solver.run(60);
     $("progBar").style.width = (100 * solver.it / iters) + "%";
     if (!done) { setTimeout(tick, 0); return; }
-    S.P = decode(solver.best, c.beam, c.cut); S.cfg = c;
+    S.P = decode(solver.best, c.beam, c.cut, c.shape); S.cfg = c;
     S.res = evaluate(S.P, Object.assign({}, ctx, { useRoad: true }), true);
     S.ctx = ctx;
     S.busy = false; $("go").disabled = false;
@@ -400,7 +414,7 @@ function renderSummary() {
     kv("Road share", r.roadFlux == null || !r.flux ? "—" : fmt(100 * r.roadFlux / (r.flux * (c.roadFlux.lamps === "one" ? 1 : 2))) + " %", `of emitted flux, ${fmt(c.roadFlux.zone.x1)}–${fmt(c.roadFlux.zone.x2)} m, ${fmt(c.roadFlux.zone.left, 1)} L / ${fmt(c.roadFlux.zone.right, 1)} R`) +
     kv("H spread", "±" + fmt(r.sp.spreadH, 1) + "°", asked(t.spreadH, 1, "°") || `${angH(mir < 0 ? -r.sp.right : r.sp.left)} … ${angH(mir < 0 ? -r.sp.left : r.sp.right)}`) +
     kv("V spread", fmt(r.sp.spreadV, 1) + "°", asked(t.spreadV, 1, "°")) +
-    kv("Hot spot", `${angH(mir * r.hMax)} ${angV(r.vMax)}`, "position of Imax") +
+    kv("Hot spot", `${angH(mir * r.hMax)} ${angV(r.vMax)}`, t.hot ? `requested ${angH(mir * t.hot.h)} ${angV(t.hot.v)}` : "position of Imax") +
     kv("Reach 1 lx / 3 lx", `${r1 ? fmt(r1) : "—"} / ${r3 ? fmt(r3) : "—"} m`, ($("plane").value === "vertical" ? "vertical plane" : "road surface") + ", centreline");
   if ($("regLine")) $("regLine").textContent = `${PRESET_TABLES[c.beam].name.replace(/ (passing|driving) beam/, "")} · ${c.beam === "low" ? "low beam" : "high beam"} · ${c.lht ? "LHT (mirrored)" : "RHT"}`;
 }
@@ -455,6 +469,7 @@ function buildIES() {
     `[LUMINAIRE] ${c.beam === "low" ? "Low beam (passing)" : "High beam (driving)"}, ${PRESET_TABLES[c.key].name}, ${c.lht ? "LHT" : "RHT"}`,
     `[_IMAX] ${Math.round(S.res.imax)} cd`, `[_FLUX] ${Math.round(S.res.flux)} lm`,
     `[_ROADFLUX] ${Math.round(S.res.roadFlux)} lm, ${c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair"}, ${c.roadFlux.zone.x1}-${c.roadFlux.zone.x2} m, ${c.roadFlux.zone.left} m L / ${c.roadFlux.zone.right} m R`,
+    ...(c.shape ? [`[_QFACTOR] ${c.shape.smile}`] : []),
     `[_GENERATED] ${new Date().toISOString().slice(0, 10)}`,
     "TILT=NONE",
     `1 -1 1 ${V.length} ${H.length} 2 2 0 0 0`, "1 1 0"];
@@ -495,11 +510,12 @@ $("paramCopy").onclick = () => {
   const o = { function: S.cfg.beam, class: S.cfg.cls, traffic: S.cfg.lht ? "LHT" : "RHT", note: "Internal frame is RHT; LHT mirrors H.", cutoff: S.cfg.beam === "low" ? S.cfg.cut : null,
     lobes: S.P.comps.map((c, i) => ({ name: ["hot spot", "spread", "foreground"][i], A_cd: Math.round(c.A), h_deg: r2(c.h), v_deg: r2(c.v), sigmaH_deg: r2(c.sh), sigmaV_deg: r2(c.sv) })),
     roadFlux: { value_lm: Math.round(S.res.roadFlux), target_lm: S.res.roadFluxTarget, lamps: S.cfg.roadFlux.lamps, zone: S.cfg.roadFlux.zone },
+    qFactor: S.cfg.shape ? S.cfg.shape.smile : 0,
     glareFloor_cd: S.cfg.beam === "low" ? Math.round(S.P.sigA) : 0 };
   const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy"));
 };
 
 // ---------- start ----------
-fillClasses("B"); syncCut(); showTable(); setRoadFluxDefault();
+fillClasses("B"); syncCut(); showTable(); setRoadFluxDefault(); setHotDefault();
 setTimeout(generate, 50);
 })();

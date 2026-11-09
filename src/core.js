@@ -149,10 +149,30 @@ function encodeVal(b, x) {
   return b[0] === "log" ? Math.log(x / b[1]) / Math.log(b[2] / b[1]) : (x - b[1]) / (b[2] - b[1]);
 }
 
-function decode(u, beam, cut) {
+// Smile factor S (0..1): bends each lobe upward toward the sides so the isolines form a smile
+// instead of a "+" (S = 0). The bend follows the lobe's own horizontal width, so the shape scales
+// with the H spread, and is zero on the lobe's axis, so the hot spot does not move.
+function applySmile(P, S) {
+  P.smile = S > 0 ? S : 0;
+  const ref = P.cut ? P.cut.elbow - 0.3 : null;
+  const hc = P.comps[0].h, W = SMILE.wk * Math.max(P.comps[1].sh, P.comps[0].sh);   // one smooth bend for the whole beam
+  for (const c of P.comps) {
+    c.bc = hc; c.w = W;
+    c.rise = !(S > 0) ? 0 : ref != null ? Math.min(SMILE.riseMax * S, S * Math.max(0, ref - c.v)) : S * SMILE.hiRise * c.sv;
+    c.thin = SMILE.thin * Math.min(1, S > 0 ? S : 0);
+  }
+  return P;
+}
+const SMILE = { wk: 1.0, thin: 0.6, riseMax: 6, hiRise: 0.6 };
+
+function decode(u, beam, cut, opt) {
   const B = BOUNDS[beam], x = u.map((ui, i) => decodeVal(B[i], ui));
   if (cut && cut.sym) { x[1] = 0; x[6] = 0; }   // symmetric passing beam: lobes centred on V-V
-  return {
+  if (opt && opt.hot) {   // hot-spot lobe pinned in H; in V it may sit up to 0.6° above the target so the peak lands on it
+    x[1] = cut && cut.sym ? 0 : opt.hot.h + (cut ? -0.8 + Math.min(1, Math.max(0, u[1])) : 0);
+    x[2] = opt.hot.v - 0.15 + 0.75 * Math.min(1, Math.max(0, u[2]));
+  }
+  const P = {
     beam, cut,
     comps: [
       { A: x[0], h: x[1], v: x[2], sh: x[3], sv: x[4] },
@@ -161,6 +181,7 @@ function decode(u, beam, cut) {
     ],
     sigA: beam === "low" ? x[14] : 0
   };
+  return applySmile(P, opt && opt.smile);
 }
 function encode(phys, beam) {
   const B = BOUNDS[beam], c = phys.comps;
@@ -176,7 +197,13 @@ function sigAt(h, v) { const a = h / SIG_SH, b = (v - SIG_V) / SIG_SV; return Ma
 
 function evalM(P, h, v, m) {
   let s = 0;
-  for (const c of P.comps) { const a = (h - c.h) / c.sh, b = (v - c.v) / c.sv; s += c.A * Math.exp(-0.5 * (a * a + b * b)); }
+  if (P.smile) {
+    for (const c of P.comps) {
+      const a = (h - c.h) / c.sh, d = (h - c.bc) / c.w, bend = 1 - Math.exp(-0.5 * d * d);
+      const vc = c.v + c.rise * bend, b = (v - vc) / (v < vc ? c.sv * (1 - c.thin * bend) : c.sv);
+      s += c.A * Math.exp(-0.5 * (a * a + b * b));
+    }
+  } else for (const c of P.comps) { const a = (h - c.h) / c.sh, b = (v - c.v) / c.sv; s += c.A * Math.exp(-0.5 * (a * a + b * b)); }
   if (P.beam === "low") { s = s * m + P.sigA * sigAt(h, v); }
   return s;
 }
@@ -200,7 +227,46 @@ function makeGrid(beam, cut, h0, h1, dh, v0, v1, dv) {
     gh: [0, 1, 2].map(() => new Float64Array(nh)), gv: [0, 1, 2].map(() => new Float64Array(nv)) };
 }
 
+function evalGridSmile(P, G) {
+  const { nh, nv, hs, vs, mask, out, env } = G, low = P.beam === "low", sA = P.sigA, C = P.comps;
+  out.fill(0); env.fill(0);
+  for (let k = 0; k < 3; k++) {
+    const c = C[k], lim = 1e-6 * c.A;
+    for (let i = 0; i < nh; i++) {
+      const a = (hs[i] - c.h) / c.sh, amp = c.A * Math.exp(-0.5 * a * a);
+      if (amp < lim) continue;
+      const d = (hs[i] - c.bc) / c.w, bend = 1 - Math.exp(-0.5 * d * d);
+      // lower half narrows toward the sides (thin); upper half keeps its width
+      const vc = c.v + c.rise * bend, invLo = 1 / (c.sv * (1 - c.thin * bend)), invUp = 1 / c.sv;
+      const jc = Math.min(nv - 1, Math.max(-1, Math.floor((vc - vs[0]) / G.dv)));      // last row below vc
+      const j0 = Math.max(0, Math.floor((vc - 4.5 / invLo - vs[0]) / G.dv)), j1 = Math.min(nv - 1, Math.ceil((vc + 4.5 / invUp - vs[0]) / G.dv));
+      // Gaussian by recurrence: g(j+1) = g(j) * r(j), r(j+1) = r(j) * q  (one exp per run instead of one per point)
+      const run = (ja, jb, inv) => {
+        if (jb < ja) return;
+        const dvv = G.dv * inv, b0 = (vs[ja] - vc) * inv, q = Math.exp(-dvv * dvv);
+        let g = amp * Math.exp(-0.5 * b0 * b0), r = Math.exp(-b0 * dvv - 0.5 * dvv * dvv);
+        for (let j = ja; j <= jb; j++) { out[j * nh + i] += g; g *= r; r *= q; }
+      };
+      run(j0, Math.min(jc, j1), invLo); run(Math.max(jc + 1, j0), j1, invUp);
+    }
+  }
+  let max = -1, mi = 0, mj = 0, flux = 0;
+  for (let j = 0; j < nv; j++) {
+    const sv = G.sgv[j] * sA, row = j * nh; let rowSum = 0;
+    for (let i = 0; i < nh; i++) {
+      let s = out[row + i];
+      if (low) { s = s * mask[row + i] + G.sgh[i] * sv; out[row + i] = s; }
+      rowSum += s;
+      if (s > env[i]) env[i] = s;
+      if (s > max) { max = s; mi = i; mj = j; }
+    }
+    flux += rowSum * G.dOm[j];
+  }
+  return { imax: max, hMax: hs[mi], vMax: vs[mj], mi, mj, flux };
+}
+
 function evalGrid(P, G) {
+  if (P.smile) return evalGridSmile(P, G);
   const { nh, nv, hs, vs, mask, out, env, gh, gv } = G;
   for (let k = 0; k < 3; k++) {
     const c = P.comps[k];
@@ -375,6 +441,32 @@ function compileRoadFlux(spec, beam, cut) {
   xs.forEach((xc, i) => ys.forEach(yc => { smp(xc, yc, 0).forEach(L => { if (L.f > 0) pts.push({ h: L.h, v: L.v, m: L.m, w: L.f * dxs[i] * dy }); }); }));
   return { pts, perLamp: spec.lamps === "one", target: spec.target || null };
 }
+// Fast version: weights on the angular flux grid. Each grid cell is subsampled; the weight is the
+// share of its solid angle whose ray lands inside the zone (summed over the lamps).
+function compileRoadFluxGrid(spec, G) {
+  if (!spec || !spec.zone) return null;
+  const z = spec.zone, x1 = Math.max(0, Math.min(z.x1, z.x2)), x2 = Math.max(z.x1, z.x2);
+  const lht = spec.traffic === "LHT", yA = lht ? -Math.abs(z.right) : -Math.abs(z.left), yB = lht ? Math.abs(z.left) : Math.abs(z.right);
+  if (!(x2 > x1) || !(yB > yA)) return null;
+  const H = spec.height, s = spec.spacing / 2, n = 4, idx = [], wt = [];
+  for (let j = 0; j < G.nv; j++) {
+    if (G.vs[j] - G.dv / 2 >= 0) continue;
+    for (let i = 0; i < G.nh; i++) {
+      let hit = 0;
+      for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) {
+        const h = (G.hs[i] + (a + 0.5) / n * G.dh - G.dh / 2) * DEG, v = (G.vs[j] + (b + 0.5) / n * G.dv - G.dv / 2) * DEG;
+        if (v >= 0) continue;
+        const r = H / Math.tan(-v), x = r * Math.cos(h), dy = r * Math.sin(h);
+        if (x < x1 || x > x2) continue;
+        for (const ly of [-s, s]) { const y = ly + dy; if (y >= yA && y <= yB) hit++; }
+      }
+      if (hit) { idx.push(j * G.nh + i); wt.push(hit / (n * n) * G.dOm[j]); }
+    }
+  }
+  return { idx: Int32Array.from(idx), wt: Float64Array.from(wt), perLamp: spec.lamps === "one", target: spec.target || null, G };
+}
+function roadFluxFromGrid(rf) { let F = 0; const o = rf.G.out; for (let k = 0; k < rf.idx.length; k++) F += o[rf.idx[k]] * rf.wt[k]; return rf.perLamp ? F / 2 : F; }
+
 function roadFluxOf(P, rf) {
   if (!rf) return null;
   let F = 0; for (const p of rf.pts) F += evalM(P, p.h, p.v, p.m) * p.w;
@@ -458,11 +550,21 @@ function evaluate(P, ctx, detail) {
   }
   const t = ctx.targets || {};
   const soft = (a, b, w) => (b ? w * ((a - b) / b) ** 2 : 0);
-  cost += soft(imax, t.imax, 10) + soft(flux, t.flux, 10) + soft(sp.spreadH, t.spreadH, 3) + soft(sp.spreadV, t.spreadV, 2);
-  const rfv = ctx.rf ? roadFluxOf(P, ctx.rf) : null;
+  cost += soft(imax, t.imax, 10) + soft(flux, t.flux, 10) + soft(sp.spreadH, t.spreadH, t.hot ? 25 : 3) + soft(sp.spreadV, t.spreadV, 2);
+  if (t.hot) {   // hot spot stays where it was asked to be
+    const mir = 1, dh = r.hMax - t.hot.h, dv = r.vMax - t.hot.v;
+    cost += 40 * (dh * dh + 4 * dv * dv);
+  }
+  const rfv = ctx.rf ? roadFluxFromGrid(ctx.rf) : null;   // fluxGrid was just evaluated above
   if (rfv != null && ctx.rf.target) cost += soft(rfv, ctx.rf.target, 12);
   if (ctx.useRoad && !t.flux && !(ctx.rf && ctx.rf.target)) cost += 0.02 * flux / 1000;
   if (!detail) return cost;
+  // refine the reported hot-spot position below the grid step
+  let hMax = r.hMax, vMax = r.vMax, best = -1;
+  for (let dh = -0.4; dh <= 0.401; dh += 0.05) for (let dv = -0.15; dv <= 0.151; dv += 0.025) {
+    const x = evalI(P, r.hMax + dh, r.vMax + dv); if (x > best) { best = x; hMax = r.hMax + dh; vMax = r.vMax + dv; }
+  }
+  r.hMax = hMax; r.vMax = vMax;
   return { cost, imax, flux, roadFlux: rfv, roadFluxTarget: ctx.rf ? ctx.rf.target : null, hMax: r.hMax, vMax: r.vMax, sp, rows, roadRows, pass: rows.every(x => x.pass !== false), roadPass: roadRows.every(x => x.pass !== false) };
 }
 
@@ -477,15 +579,17 @@ function row(e, kind, val, min, max) {
 function buildContext(o) {
   const beam = o.beam, cut = beam === "low" ? o.cut : null;
   const vRange = beam === "low" ? [-12, 5] : [-12, 12];
-  return {
+  const ctx = {
     beam, cut,
     core: makeGrid(beam, cut, -70, 70, 0.4, vRange[0], vRange[1], 0.15),
     fluxGrid: makeGrid(beam, cut, -90, 90, 1, -60, 40, 0.25),
     table: compileTable(o.table, beam, cut),
     road: compileRoad(o.road, beam, cut),
-    rf: compileRoadFlux(o.roadFlux, beam, cut),
-    useRoad: o.useRoad, targets: o.targets
+    rf: null,
+    useRoad: o.useRoad, targets: o.targets, shape: o.shape || null
   };
+  ctx.rf = compileRoadFluxGrid(o.roadFlux, ctx.fluxGrid);
+  return ctx;
 }
 
 function initPhysical(beam, t, cut) {
@@ -508,7 +612,7 @@ function mulberry(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79
 
 function makeSolver(ctx, u0, iters) {
   const rng = mulberry(12345), beam = ctx.beam, n = u0.length;
-  const f = u => evaluate(decode(u, beam, ctx.cut), ctx, false);
+  const f = u => evaluate(decode(u, beam, ctx.cut, ctx.shape), ctx, false);
   const st = { best: u0.slice(), fbest: f(u0), step: 0.08, it: 0, iters };
   st.run = function (k) {
     const end = Math.min(st.iters, st.it + k);
@@ -525,4 +629,4 @@ function makeSolver(ctx, u0, iters) {
   return st;
 }
 
-if (typeof module !== "undefined") module.exports = { ROAD_FLUX_DEFAULTS, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };
+if (typeof module !== "undefined") module.exports = { SMILE, applySmile, ROAD_FLUX_DEFAULTS, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };
