@@ -440,6 +440,12 @@ function renderTables() {
     : `<tbody><tr><td class="note" style="white-space:normal">No road checks for this beam function. Switch to Road requirement mode or paste a requirement set.</td></tr></tbody>`;
 }
 
+function setCount(id, rows) {
+  const el = $(id), n = rows.filter(r => r.pass != null).length, f = rows.filter(r => r.pass === false).length;
+  el.textContent = !n ? "" : f ? `${f} OF ${n} FAIL` : `ALL ${n} PASS`;
+  el.className = "cnt" + (!n ? "" : f ? " f" : " p");
+}
+
 function recomputeRoad() {
   // re-check with the method currently selected (it can change after solving)
   const c = S.cfg;
@@ -447,7 +453,7 @@ function recomputeRoad() {
   S.res.roadRows = rd.map(rc => roadRow(rc, checkValue(S.P, rc)));
 }
 
-function renderAll() { if (!S.res) return; recomputeRoad(); renderSummary(); renderTables(); drawIso(); drawRoad(); }
+function renderAll() { if (!S.res) return; recomputeRoad(); renderSummary(); renderTables(); setCount("ecCount", S.res.rows); setCount("rdCount", S.res.roadRows); drawIso(); drawRoad(); }
 ["isoUnit", "isoRange", "isoPts"].forEach(id => $(id).addEventListener("change", () => S.res && drawIso()));
 ["roadRange", "roadPts"].forEach(id => $(id).addEventListener("change", () => S.res && drawRoad()));
 $("plane").addEventListener("change", () => S.res && renderAll());
@@ -514,6 +520,13 @@ $("paramCopy").onclick = () => {
     glareFloor_cd: S.cfg.beam === "low" ? Math.round(S.P.sigA) : 0 };
   const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy"));
 };
+
+// ---------- collapsible tables (remembered in this browser) ----------
+["foldEce", "foldRoad"].forEach(id => {
+  const el = $(id), key = "beamsynth-" + id;
+  try { if (localStorage.getItem(key) === "closed") el.open = false; } catch (e) { }
+  el.addEventListener("toggle", () => { try { localStorage.setItem(key, el.open ? "open" : "closed"); } catch (e) { } });
+});
 
 // ---------- start ----------
 fillClasses("B"); syncCut(); showTable(); setRoadFluxDefault(); setHotDefault();

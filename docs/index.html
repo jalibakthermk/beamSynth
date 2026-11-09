@@ -99,8 +99,20 @@ main{display:flex;flex-direction:column;gap:18px;min-width:0}
 .readout{font:12.5px var(--f-mono);font-variant-numeric:tabular-nums;min-height:1.4em}
 .legend{display:flex;flex-wrap:wrap;gap:4px 10px;font:11.5px var(--f-mono);color:var(--plot-dim)}
 .legend i{display:inline-block;width:12px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
-.tables{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:18px}
-@media (max-width:1500px){.tables{grid-template-columns:minmax(0,1fr)}}
+.tables{display:flex;flex-direction:column;gap:18px;min-width:0}
+details.fold{border-top:1px solid var(--line);padding-top:0}
+details.fold>div{margin-top:0;display:block}
+details.fold>summary{list-style:none;cursor:pointer;font:inherit;letter-spacing:normal;text-transform:none;color:inherit;user-select:none}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary h2{margin:0}
+details.fold>summary .note{margin-left:auto}
+details.fold:not([open])>summary{border-bottom:0}
+details.fold>summary:hover{background:var(--sunk)}
+.chev{width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s;flex:none}
+details.fold:not([open]) .chev{transform:rotate(-45deg)}
+.cnt{font:700 11px var(--f-display);letter-spacing:.08em;padding:2px 7px;border-radius:3px;background:var(--sunk);color:var(--muted)}
+.cnt.p{background:color-mix(in srgb,var(--pass) 16%,transparent);color:var(--pass)}
+.cnt.f{background:color-mix(in srgb,var(--fail) 16%,transparent);color:var(--fail)}
 @media (max-width:1200px) and (min-width:641px){.summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:640px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.kv span{font-size:16px}}
 .tbl{overflow-x:auto}
@@ -119,7 +131,7 @@ tr.fail td{background:color-mix(in srgb,var(--fail) 6%,transparent)}
 footer{color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding-top:10px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px}
 footer a{color:inherit;text-decoration:underline;text-underline-offset:2px}
 footer a:hover{color:var(--ink)}
-@media (prefers-reduced-motion:reduce){.prog i{transition:none}}
+@media (prefers-reduced-motion:reduce){.prog i{transition:none}.chev{transition:none}}
 </style>
 </head>
 <body>
@@ -284,14 +296,14 @@ footer a:hover{color:var(--ink)}
   </section>
 
   <div class="tables">
-    <section class="screen">
-      <div class="bar"><h2>ECE compliance</h2><span class="note" id="tblName"></span></div>
+    <details class="screen fold" id="foldEce" open>
+      <summary class="bar"><span class="chev" aria-hidden="true"></span><h2>ECE compliance</h2><span class="cnt" id="ecCount"></span><span class="note" id="tblName"></span></summary>
       <div class="tbl"><table id="ecTbl"></table></div>
-    </section>
-    <section class="screen">
-      <div class="bar"><h2>Road checks</h2><span class="note" id="roadMode"></span></div>
+    </details>
+    <details class="screen fold" id="foldRoad" open>
+      <summary class="bar"><span class="chev" aria-hidden="true"></span><h2>Road checks</h2><span class="cnt" id="rdCount"></span><span class="note" id="roadMode"></span></summary>
       <div class="tbl"><table id="rdTbl"></table></div>
-    </section>
+    </details>
   </div>
 
   <section class="screen">
@@ -1389,6 +1401,12 @@ function renderTables() {
     : `<tbody><tr><td class="note" style="white-space:normal">No road checks for this beam function. Switch to Road requirement mode or paste a requirement set.</td></tr></tbody>`;
 }
 
+function setCount(id, rows) {
+  const el = $(id), n = rows.filter(r => r.pass != null).length, f = rows.filter(r => r.pass === false).length;
+  el.textContent = !n ? "" : f ? `${f} OF ${n} FAIL` : `ALL ${n} PASS`;
+  el.className = "cnt" + (!n ? "" : f ? " f" : " p");
+}
+
 function recomputeRoad() {
   // re-check with the method currently selected (it can change after solving)
   const c = S.cfg;
@@ -1396,7 +1414,7 @@ function recomputeRoad() {
   S.res.roadRows = rd.map(rc => roadRow(rc, checkValue(S.P, rc)));
 }
 
-function renderAll() { if (!S.res) return; recomputeRoad(); renderSummary(); renderTables(); drawIso(); drawRoad(); }
+function renderAll() { if (!S.res) return; recomputeRoad(); renderSummary(); renderTables(); setCount("ecCount", S.res.rows); setCount("rdCount", S.res.roadRows); drawIso(); drawRoad(); }
 ["isoUnit", "isoRange", "isoPts"].forEach(id => $(id).addEventListener("change", () => S.res && drawIso()));
 ["roadRange", "roadPts"].forEach(id => $(id).addEventListener("change", () => S.res && drawRoad()));
 $("plane").addEventListener("change", () => S.res && renderAll());
@@ -1463,6 +1481,13 @@ $("paramCopy").onclick = () => {
     glareFloor_cd: S.cfg.beam === "low" ? Math.round(S.P.sigA) : 0 };
   const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy"));
 };
+
+// ---------- collapsible tables (remembered in this browser) ----------
+["foldEce", "foldRoad"].forEach(id => {
+  const el = $(id), key = "beamsynth-" + id;
+  try { if (localStorage.getItem(key) === "closed") el.open = false; } catch (e) { }
+  el.addEventListener("toggle", () => { try { localStorage.setItem(key, el.open ? "open" : "closed"); } catch (e) { } });
+});
 
 // ---------- start ----------
 fillClasses("B"); syncCut(); showTable(); setRoadFluxDefault(); setHotDefault();
