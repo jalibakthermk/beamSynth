@@ -9,6 +9,16 @@ It runs entirely in the browser: open `docs/index.html`, or the GitHub Pages sit
 - **Two ways to define the beam**
   - **Road requirement (JSON):** give customer requirements on the road and the tool solves for a beam that meets them. The format is the same requirement set used in [road-illuminate](https://github.com/jalibakthermk/Road-illuminate), so one customer-spec file works in both tools.
   - **Beam parameters:** beam function, R149 class, maximum intensity (cd), luminous flux (lm), horizontal spread (±°, half-width at 5 % of Imax) and vertical spread (°, height at 5 % of Imax).
+  - Requirement files can be uploaded (click or drag and drop) or pasted.
+- **Flux on road.** The luminous flux that reaches the road surface inside a zone you define (distance from–to, width left and right), for one lamp or the lamp pair. It is a target for the solver, with defaults you can change:
+
+  | Beam | Default flux on road |
+  |---|---|
+  | Low beam, Class B, DS, ES | 600 lm |
+  | Low beam, Class CS | 300 lm |
+  | High beam | 600 lm |
+
+  The default zone is 0–100 m ahead, 10 m left and 10 m right, evaluated for one lamp. Leave the target empty to only report the value. The page also shows the road share, the fraction of the emitted flux that lands in the zone.
 - **ECE compliance is enforced while solving.** The regulation test table for the selected class is a hard constraint; your parameters are soft targets. If a request cannot meet ECE, the tool shows the closest compliant result and reports requested against achieved values.
 - **Iso-candela view** in cd or lx at 25 m, with test points, zones, the cut-off line and the hot spot.
 - **Road illumination** for the lamp pair, top view with lane markings, using either *vertical planes on road* (the HSPR / GTB method, default) or *road surface* (horizontal plane) illuminance.
@@ -25,7 +35,7 @@ It runs entirely in the browser: open `docs/index.html`, or the GitHub Pages sit
   For symmetric passing beams the lobes are centred on V-V. The symmetric driving beams have no "HV within 80 % of Imax" check, as R149 exempts them.
 - **Right- or left-hand traffic.** The tables are written for RHT; LHT mirrors the beam.
 - **Export**
-  - IES LM-63-2002, photometric type B (H-V), absolute candela, one lamp. Load it into road-illuminate to verify the beam.
+  - **Download IES:** LM-63-2002, photometric type B (H-V), absolute candela, one lamp, saved with a name such as `beamsynth_low_class-B_RHT_30081cd.ies`. Load it into road-illuminate to verify the beam. The file can also be copied as text.
   - The requirement set back in road-illuminate format.
   - The fitted model parameters as JSON.
 
@@ -43,6 +53,7 @@ Paste a road-illuminate requirement set as it is (a list of checks), or wrap it 
   "evalHeight_m": 0,
   "road": { "laneWidth_m": 3.5 },
   "targets": { "flux_lm": 800 },
+  "roadFlux": { "target_lm": 600, "lamps": "one", "zone": { "x1": 0, "x2": 100, "left": 10, "right": 10 } },
   "checks": [
     { "label": "Ego lane 50 m", "type": "point", "x": 50, "y": 0, "op": ">=", "limit": 8 },
     { "label": "Reach on vehicle axis, 3 lx", "type": "range", "y": 0, "thr": 3, "op": ">=", "limit": 75 },
@@ -64,6 +75,7 @@ Paste a road-illuminate requirement set as it is (a list of checks), or wrap it 
 - `z` (optional, per check) sets that check's evaluation height. This is a Beam Synth extension; road-illuminate ignores it.
 - `class` (optional): `B`, `CS`, `DS`, `ES` for the passing beam; `B`, `BS`, `CS`, `DSES` for the driving beam.
 - `targets` (optional) are soft goals: `imax`, `flux_lm`, `spreadH_deg`, `spreadV_deg`.
+- `roadFlux` (optional): `target_lm` (`null` to only report), `lamps` (`one` or `pair`), and `zone` with `x1`, `x2` (m ahead) and `left`, `right` (m, positive extents). Without it, the default target for the class and the default zone apply.
 
 Examples are in [`examples/`](examples).
 

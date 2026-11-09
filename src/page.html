@@ -52,6 +52,15 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 .btnrow{display:flex;flex-wrap:wrap;gap:6px}
 .btn{font:600 13px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:6px 10px;cursor:pointer}
 .btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.06)}
+.drop{display:flex;flex-direction:column;align-items:center;gap:2px;border:1.5px dashed var(--line);border-radius:5px;padding:12px 10px;cursor:pointer;background:var(--sunk);text-align:center}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+.drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.drop-t{font-weight:600;font-size:14px;color:var(--ink)}
+.drop-s{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.drop-s.err{color:var(--fail)}
 .go{font:700 16px var(--f-display);letter-spacing:.04em;background:var(--accent);color:var(--accent-ink);border:0;border-radius:5px;padding:11px;cursor:pointer;width:100%}
 .go:disabled{opacity:.6;cursor:progress}
 .prog{height:4px;background:var(--sunk);border-radius:2px;overflow:hidden}
@@ -63,7 +72,7 @@ summary{cursor:pointer;font:600 12px var(--f-display);letter-spacing:.08em;text-
 details>div{margin-top:10px;display:flex;flex-direction:column;gap:9px}
 .note{font-size:12.5px;color:var(--muted);margin:0}
 main{display:flex;flex-direction:column;gap:18px;min-width:0}
-.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .kv{background:var(--surface);padding:10px 12px;min-width:0}
 .kv b{display:block;font:600 11px var(--f-display);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
 .kv span{font:500 18px var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -84,6 +93,7 @@ main{display:flex;flex-direction:column;gap:18px;min-width:0}
 .legend i{display:inline-block;width:12px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 .tables{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:18px}
 @media (max-width:1500px){.tables{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:1200px) and (min-width:641px){.summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:640px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.kv span{font-size:16px}}
 .tbl{overflow-x:auto}
 table{border-collapse:collapse;width:100%;font-size:13px}
@@ -156,12 +166,17 @@ footer a:hover{color:var(--ink)}
 
   <fieldset id="roadPanel" hidden>
     <p class="lab">Road requirement (JSON)</p>
+    <label class="drop" id="drop" for="jsonFile">
+      <input type="file" id="jsonFile" accept=".json,application/json,text/plain">
+      <span class="drop-t">Upload JSON file</span>
+      <span class="drop-s" id="dropName">or drop a requirement file here</span>
+    </label>
     <textarea id="roadJson" rows="18" spellcheck="false" aria-label="Road requirement JSON"></textarea>
     <div class="btnrow">
       <button class="btn" id="exLow">Low-beam example</button>
       <button class="btn" id="exHigh">High-beam example</button>
     </div>
-    <p class="note">Paste a road-illuminate requirement set as is, or wrap it as <code>"checks"</code> with vehicle settings. Check types: <code>point</code>, <code>range</code>, <code>width</code>, <code>zone</code>, with <code>op</code> and <code>limit</code>; <code>y</code> is positive to the left, as in road-illuminate. Optional <code>z</code> per check sets its evaluation height. Optional <code>class</code> (<code>B</code>, <code>CS</code>, <code>DS</code>, <code>ES</code>; driving beam <code>BS</code>, <code>DSES</code>). Optional <code>targets</code>: <code>imax</code>, <code>flux_lm</code>, <code>spreadH_deg</code>, <code>spreadV_deg</code>.</p>
+    <p class="note">Paste a road-illuminate requirement set as is, or wrap it as <code>"checks"</code> with vehicle settings. Check types: <code>point</code>, <code>range</code>, <code>width</code>, <code>zone</code>, with <code>op</code> and <code>limit</code>; <code>y</code> is positive to the left, as in road-illuminate. Optional <code>z</code> per check sets its evaluation height. Optional <code>class</code> (<code>B</code>, <code>CS</code>, <code>DS</code>, <code>ES</code>; driving beam <code>BS</code>, <code>DSES</code>). Optional <code>targets</code>: <code>imax</code>, <code>flux_lm</code>, <code>spreadH_deg</code>, <code>spreadV_deg</code>. Optional <code>roadFlux</code>: <code>target_lm</code>, <code>lamps</code> (<code>one</code> or <code>pair</code>), <code>zone</code> {<code>x1</code>, <code>x2</code>, <code>left</code>, <code>right</code>}.</p>
   </fieldset>
 
   <fieldset>
@@ -174,6 +189,23 @@ footer a:hover{color:var(--ink)}
       <label class="f">Lamp spacing (m)<input id="sp" type="number" step="0.05" value="1.4"></label>
       <label class="f">Evaluation height (m)<input id="evalH" type="number" step="0.05" min="0" value="0"></label>
     </div>
+  </fieldset>
+
+  <fieldset>
+    <p class="lab">Flux on road</p>
+    <div class="row2">
+      <label class="f">Target (lm)<input id="rfT" type="number" step="10" min="0" value="600"><small>blank = report only</small></label>
+      <label class="f">Evaluate for<select id="rfL"><option value="one">One lamp</option><option value="pair">Lamp pair</option></select></label>
+    </div>
+    <div class="row2">
+      <label class="f">Zone from (m)<input id="rfX1" type="number" step="5" min="0" value="0"></label>
+      <label class="f">Zone to (m)<input id="rfX2" type="number" step="5" min="1" value="100"></label>
+    </div>
+    <div class="row2">
+      <label class="f">Width left (m)<input id="rfYL" type="number" step="0.5" min="0" value="10"></label>
+      <label class="f">Width right (m)<input id="rfYR" type="number" step="0.5" min="0" value="10"></label>
+    </div>
+    <p class="note">Luminous flux reaching the road surface inside this rectangle, measured from the lamps. Default target: 600 lm (Class B, DS, ES and high beam), 300 lm (Class CS).</p>
   </fieldset>
 
   <details id="cutBox">
@@ -245,7 +277,8 @@ footer a:hover{color:var(--ink)}
   <section class="screen">
     <div class="bar"><h2>Export</h2><span class="note">IES LM-63-2002, photometric type B (H-V), absolute cd, one lamp</span></div>
     <div class="export">
-      <div class="btnrow"><button class="btn" id="iesBuild">Build IES</button><button class="btn" id="iesCopy">Copy IES</button><button class="btn" id="paramCopy">Copy model parameters</button><button class="btn" id="riCopy">Copy checks for road-illuminate</button></div>
+      <div class="btnrow"><button class="btn primary" id="iesDl">Download IES</button><button class="btn" id="iesBuild">Build IES</button><button class="btn" id="iesCopy">Copy IES</button><button class="btn" id="paramCopy">Copy model parameters</button><button class="btn" id="riCopy">Copy checks for road-illuminate</button></div>
+      <p class="note" id="dlNote" hidden></p>
       <textarea id="iesOut" readonly spellcheck="false" aria-label="IES output" placeholder="Build the IES file, then copy it into a .ies file."></textarea>
     </div>
   </section>

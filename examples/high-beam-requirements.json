@@ -13,6 +13,16 @@
   "targets": {
     "flux_lm": 1200
   },
+  "roadFlux": {
+    "target_lm": 600,
+    "lamps": "one",
+    "zone": {
+      "x1": 0,
+      "x2": 100,
+      "left": 10,
+      "right": 10
+    }
+  },
   "checks": [
     {
       "label": "Centre 100 m",

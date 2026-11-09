@@ -36,10 +36,13 @@ function showTable() { const k = tableKey(); $("tableJson").value = tableFor(k);
 $("tableJson").addEventListener("input", () => { S.tables[tableKey()] = $("tableJson").value; });
 $("tableReset").onclick = () => { const k = tableKey(); S.tables[k] = compactJSON(PRESET_TABLES[k].points); showTable(); };
 
-const PARAM_DEFAULTS = { low: { imax: 30000, flux: 800, sph: 14, spv: 4 }, low_sym: { imax: 18000, flux: 700, sph: 16, spv: 4 },
+const PARAM_DEFAULTS = { low: { imax: 30000, flux: 800, sph: 14, spv: 4 }, low_sym: { imax: 18000, flux: 700, sph: 16, spv: 4 }, low_CS: { imax: 18000, flux: 400, sph: 16, spv: 4 },
   high: { imax: 90000, flux: 1200, sph: 12, spv: 6 }, high_sym: { imax: 60000, flux: 800, sph: 12, spv: 6 } };
+function setRoadFluxDefault() { $("rfT").value = roadFluxDefault(S.beam, $("cls").value); }
 function setDefaults() {
-  const d = PARAM_DEFAULTS[S.beam + ($("cls").value === "B" ? "" : "_sym")];
+  setRoadFluxDefault();
+  const cls = $("cls").value;
+  const d = PARAM_DEFAULTS[S.beam + "_" + cls] || PARAM_DEFAULTS[S.beam + (cls === "B" ? "" : "_sym")];
   $("imax").value = d.imax; $("flux").value = d.flux; $("sph").value = d.sph; $("spv").value = d.spv;
 }
 $("fn").onchange = () => {
@@ -47,6 +50,28 @@ $("fn").onchange = () => {
 };
 $("cls").onchange = () => { setDefaults(); syncCut(); showTable();
 };
+// ---------- JSON upload ----------
+function loadJsonFile(file) {
+  if (!file) return;
+  const name = $("dropName");
+  if (file.size > 2e6) { name.textContent = `${file.name} is larger than 2 MB, so it was not loaded.`; name.className = "drop-s err"; return; }
+  const rd = new FileReader();
+  rd.onload = () => {
+    const text = String(rd.result);
+    let data;
+    try { data = JSON.parse(text); }
+    catch (e) { name.textContent = `${file.name} is not valid JSON: ${e.message}`; name.className = "drop-s err"; return; }
+    $("roadJson").value = compactJSON(data); setMode("road");
+    name.textContent = `Loaded ${file.name}. Press Generate beam.`; name.className = "drop-s";
+  };
+  rd.onerror = () => { name.textContent = `Could not read ${file.name}.`; name.className = "drop-s err"; };
+  rd.readAsText(file);
+}
+$("jsonFile").addEventListener("change", e => { loadJsonFile(e.target.files[0]); e.target.value = ""; });
+["dragenter", "dragover"].forEach(t => $("drop").addEventListener(t, e => { e.preventDefault(); $("drop").classList.add("over"); }));
+["dragleave", "drop"].forEach(t => $("drop").addEventListener(t, e => { e.preventDefault(); $("drop").classList.remove("over"); }));
+$("drop").addEventListener("drop", e => loadJsonFile(e.dataTransfer && e.dataTransfer.files[0]));
+
 $("exLow").onclick = () => { $("roadJson").value = compactJSON(PRESET_ROAD.low); };
 $("exHigh").onclick = () => { $("roadJson").value = compactJSON(PRESET_ROAD.high); };
 
@@ -64,8 +89,15 @@ function gather() {
   let road = null;
   try { road = JSON.parse($("roadJson").value); } catch (e) { if (S.mode === "road") throw new Error("Road JSON: " + e.message); }
   if (S.mode === "road" && road) {
-    if (road.function === "low" || road.function === "high") { $("fn").value = road.function; S.beam = road.function; fillClasses(road.class); syncCut(); showTable(); }
-    else if (road.class) { fillClasses(road.class); syncCut(); showTable(); }
+    if (road.function === "low" || road.function === "high") { $("fn").value = road.function; S.beam = road.function; fillClasses(road.class); syncCut(); showTable(); setRoadFluxDefault(); }
+    else if (road.class) { fillClasses(road.class); syncCut(); showTable(); setRoadFluxDefault(); }
+    const rf = road.roadFlux;
+    if (rf && typeof rf === "object") {
+      if (rf.target_lm !== undefined) $("rfT").value = rf.target_lm == null ? "" : rf.target_lm;
+      if (rf.lamps === "one" || rf.lamps === "pair") $("rfL").value = rf.lamps;
+      const z = rf.zone || {};
+      [["x1", "rfX1"], ["x2", "rfX2"], ["left", "rfYL"], ["right", "rfYR"]].forEach(([k, id]) => { if (isFinite(z[k])) $(id).value = Math.abs(z[k]); });
+    }
     if (road.traffic === "RHT" || road.traffic === "LHT") $("traffic").value = road.traffic;
     if (road.mounting) { if (road.mounting.height_m) $("mh").value = road.mounting.height_m; if (road.mounting.spacing_m) $("sp").value = road.mounting.spacing_m; }
     if (road.plane === "vertical" || road.plane === "horizontal") $("plane").value = road.plane;
@@ -94,7 +126,11 @@ function gather() {
   }
   const lane = (road && !isSet && road.road && road.road.laneWidth_m) || 3.5;
   const evalH = Math.max(0, num("evalH") || 0);
-  return { beam: S.beam, cls: $("cls").value, key: tableKey(), sym, cut, table, lht, H, sp, checks, evalH, targets, lane, mode: S.mode };
+  const rfZone = { x1: Math.max(0, num("rfX1") ?? 0), x2: num("rfX2") ?? 100, left: Math.abs(num("rfYL") ?? 10), right: Math.abs(num("rfYR") ?? 10) };
+  if (!(rfZone.x2 > rfZone.x1) || !(rfZone.left + rfZone.right > 0)) throw new Error("Flux on road zone: 'to' must be beyond 'from', and the width must be more than 0.");
+  const rfTarget = num("rfT");
+  const roadFlux = { zone: rfZone, target: rfTarget && rfTarget > 0 ? rfTarget : null, lamps: $("rfL").value, height: H, spacing: sp, traffic: lht ? "LHT" : "RHT" };
+  return { beam: S.beam, cls: $("cls").value, key: tableKey(), sym, cut, table, lht, H, sp, checks, evalH, targets, roadFlux, lane, mode: S.mode };
 }
 
 function generate() {
@@ -105,7 +141,7 @@ function generate() {
   const t0 = performance.now();
   const ctx = buildContext({ beam: c.beam, cut: c.cut, table: c.table,
     road: { checks: c.checks, height: c.H, spacing: c.sp, plane: $("plane").value, traffic: c.lht ? "LHT" : "RHT", evalH: c.evalH },
-    useRoad: c.mode === "road", targets: c.targets });
+    useRoad: c.mode === "road", targets: c.targets, roadFlux: c.roadFlux });
   const u0 = encode(initPhysical(c.beam, c.targets, c.cut), c.beam);
   const iters = 2400, solver = makeSolver(ctx, u0, iters);
   const tick = () => {
@@ -290,6 +326,11 @@ function drawRoad() {
   line(side * L / 2, []); line(-side * L / 2, [10, 8]); line(-side * 1.5 * L, []);
   // vehicle
   g.fillStyle = "#e6eef4"; g.fillRect(X(0) - 1, Y(-0.9), 4, Y(0.9) - Y(-0.9));
+  { const z = S.cfg.roadFlux.zone;
+    g.setLineDash([8, 4]); g.strokeStyle = css("--accent"); g.lineWidth = 1.5;
+    g.strokeRect(X(z.x1), Y(-z.left), X(Math.min(z.x2, view.x1 + 5)) - X(z.x1), Y(z.right) - Y(-z.left)); g.setLineDash([]); g.lineWidth = 1;
+    g.fillStyle = css("--accent"); g.font = "600 10.5px " + css("--f-body"); g.textAlign = "right";
+    g.fillText("Flux on road zone", Math.min(X(z.x2), box.x + box.w) - 4, Y(-z.left) + 13); }
   if ($("roadPts").checked) {
     const pass = css("--pass"), fail = css("--fail");
     S.res.roadRows.forEach(r => {
@@ -354,7 +395,9 @@ function renderSummary() {
     kv("ECE verdict", nf ? `${nf} of ${n} fail` : `PASS ${n}/${n}`, `Class ${c.cls === "DSES" ? "DS / ES" : c.cls} ${c.beam === "low" ? "passing" : "driving"} beam`, "verdict " + (nf ? "bad" : "ok")) +
     kv("Road checks", nrt ? (nr ? `${nr} of ${nrt} missed` : `met ${nrt}/${nrt}`) : "none", c.mode === "road" ? "solved for" : "checked only", "verdict " + (nr ? "bad" : "ok")) +
     kv("Imax", fmt(r.imax) + " cd", asked(t.imax, 0, " cd")) +
-    kv("Flux", fmt(r.flux) + " lm", asked(t.flux, 0, " lm")) +
+    kv("Flux", fmt(r.flux) + " lm", asked(t.flux, 0, " lm") || "emitted, one lamp") +
+    kv("Flux on road", r.roadFlux == null ? "—" : fmt(r.roadFlux) + " lm", (r.roadFluxTarget ? `target ${fmt(r.roadFluxTarget)} lm · ` : "") + (c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair")) +
+    kv("Road share", r.roadFlux == null || !r.flux ? "—" : fmt(100 * r.roadFlux / (r.flux * (c.roadFlux.lamps === "one" ? 1 : 2))) + " %", `of emitted flux, ${fmt(c.roadFlux.zone.x1)}–${fmt(c.roadFlux.zone.x2)} m, ${fmt(c.roadFlux.zone.left, 1)} L / ${fmt(c.roadFlux.zone.right, 1)} R`) +
     kv("H spread", "±" + fmt(r.sp.spreadH, 1) + "°", asked(t.spreadH, 1, "°") || `${angH(mir < 0 ? -r.sp.right : r.sp.left)} … ${angH(mir < 0 ? -r.sp.left : r.sp.right)}`) +
     kv("V spread", fmt(r.sp.spreadV, 1) + "°", asked(t.spreadV, 1, "°")) +
     kv("Hot spot", `${angH(mir * r.hMax)} ${angV(r.vMax)}`, "position of Imax") +
@@ -411,6 +454,7 @@ function buildIES() {
     "[MANUFAC] Beam Synth",
     `[LUMINAIRE] ${c.beam === "low" ? "Low beam (passing)" : "High beam (driving)"}, ${PRESET_TABLES[c.key].name}, ${c.lht ? "LHT" : "RHT"}`,
     `[_IMAX] ${Math.round(S.res.imax)} cd`, `[_FLUX] ${Math.round(S.res.flux)} lm`,
+    `[_ROADFLUX] ${Math.round(S.res.roadFlux)} lm, ${c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair"}, ${c.roadFlux.zone.x1}-${c.roadFlux.zone.x2} m, ${c.roadFlux.zone.left} m L / ${c.roadFlux.zone.right} m R`,
     `[_GENERATED] ${new Date().toISOString().slice(0, 10)}`,
     "TILT=NONE",
     `1 -1 1 ${V.length} ${H.length} 2 2 0 0 0`, "1 1 0"];
@@ -425,6 +469,19 @@ $("riCopy").onclick = () => {
   const txt = JSON.stringify(set, null, 2); $("iesOut").value = txt; copy(txt, $("riCopy"));
 };
 $("iesBuild").onclick = () => { $("iesOut").value = buildIES(); };
+function iesName() {
+  const c = S.cfg, cls = c.cls === "DSES" ? "DS-ES" : c.cls;
+  return `beamsynth_${c.beam === "low" ? "low" : "high"}_class-${cls}_${c.lht ? "LHT" : "RHT"}_${Math.round(S.res.imax)}cd.ies`;
+}
+$("iesDl").onclick = () => {
+  if (!S.res) return;
+  const txt = buildIES(); $("iesOut").value = txt;
+  const url = URL.createObjectURL(new Blob([txt], { type: "application/octet-stream" }));
+  const a = document.createElement("a"); a.href = url; a.download = iesName(); document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  const n = $("dlNote"); n.hidden = false;
+  n.textContent = `Saving ${a.download}. If no file appears, this view blocks downloads: use Copy IES instead.`;
+};
 async function copy(text, btn) {
   const orig = btn.textContent;
   try { await navigator.clipboard.writeText(text); btn.textContent = "Copied"; }
@@ -437,11 +494,12 @@ $("paramCopy").onclick = () => {
   const r2 = x => Math.round(x * 1000) / 1000;
   const o = { function: S.cfg.beam, class: S.cfg.cls, traffic: S.cfg.lht ? "LHT" : "RHT", note: "Internal frame is RHT; LHT mirrors H.", cutoff: S.cfg.beam === "low" ? S.cfg.cut : null,
     lobes: S.P.comps.map((c, i) => ({ name: ["hot spot", "spread", "foreground"][i], A_cd: Math.round(c.A), h_deg: r2(c.h), v_deg: r2(c.v), sigmaH_deg: r2(c.sh), sigmaV_deg: r2(c.sv) })),
+    roadFlux: { value_lm: Math.round(S.res.roadFlux), target_lm: S.res.roadFluxTarget, lamps: S.cfg.roadFlux.lamps, zone: S.cfg.roadFlux.zone },
     glareFloor_cd: S.cfg.beam === "low" ? Math.round(S.P.sigA) : 0 };
   const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy"));
 };
 
 // ---------- start ----------
-fillClasses("B"); syncCut(); showTable();
+fillClasses("B"); syncCut(); showTable(); setRoadFluxDefault();
 setTimeout(generate, 50);
 })();

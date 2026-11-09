@@ -102,6 +102,7 @@ const PRESET_ROAD = {
     plane: "vertical", evalHeight_m: 0,
     road: { laneWidth_m: 3.5 },
     targets: { flux_lm: 800 },
+    roadFlux: { target_lm: 600, lamps: "one", zone: { x1: 0, x2: 100, left: 10, right: 10 } },
     checks: [
       { label: "Ego lane 50 m", type: "point", x: 50, y: 0, op: ">=", limit: 8 },
       { label: "Reach on vehicle axis, 3 lx", type: "range", y: 0, thr: 3, op: ">=", limit: 75 },
@@ -116,6 +117,7 @@ const PRESET_ROAD = {
     plane: "vertical", evalHeight_m: 0,
     road: { laneWidth_m: 3.5 },
     targets: { flux_lm: 1200 },
+    roadFlux: { target_lm: 600, lamps: "one", zone: { x1: 0, x2: 100, left: 10, right: 10 } },
     checks: [
       { label: "Centre 100 m", type: "point", x: 100, y: 0, op: ">=", limit: 10 },
       { label: "Reach on vehicle axis, 1 lx", type: "range", y: 0, thr: 1, op: ">=", limit: 300 },
@@ -350,6 +352,35 @@ function compileRoad(spec, beam, cut) {
   });
 }
 
+// ---------- flux on road ----------
+// Luminous flux landing on the road surface inside a rectangle ahead of the vehicle:
+// sum of horizontal illuminance x area. zone: {x1, x2, left, right} in metres (left/right as positive extents).
+const ROAD_FLUX_DEFAULTS = { low_B: 600, low_DS: 600, low_ES: 600, low_CS: 300, high: 600 };
+const ROAD_FLUX_ZONE = { x1: 0, x2: 100, left: 10, right: 10 };
+function roadFluxDefault(beam, cls) { return beam === "high" ? ROAD_FLUX_DEFAULTS.high : (ROAD_FLUX_DEFAULTS["low_" + cls] || 600); }
+
+function compileRoadFlux(spec, beam, cut) {
+  if (!spec || !spec.zone) return null;
+  const z = spec.zone, x1 = Math.max(0.05, Math.min(z.x1, z.x2)), x2 = Math.max(z.x1, z.x2);
+  const yA = -Math.abs(z.left), yB = Math.abs(z.right);
+  if (!(x2 > x1) || !(yB > yA)) return null;
+  const smp = makeSampler({ height: spec.height, spacing: spec.spacing, traffic: spec.traffic, plane: "horizontal" }, beam, cut);
+  // finer steps close to the lamps where illuminance changes fastest
+  const xs = [], dxs = [];
+  let x = x1;
+  while (x < x2 - 1e-9) { const dx = Math.min(x < 10 ? 0.25 : x < 30 ? 0.5 : x < 80 ? 1 : 2, x2 - x); xs.push(x + dx / 2); dxs.push(dx); x += dx; }
+  const dy = Math.min(0.5, (yB - yA) / 8), ys = [];
+  for (let y = yA + dy / 2; y < yB; y += dy) ys.push(y);
+  const pts = [];
+  xs.forEach((xc, i) => ys.forEach(yc => { smp(xc, yc, 0).forEach(L => { if (L.f > 0) pts.push({ h: L.h, v: L.v, m: L.m, w: L.f * dxs[i] * dy }); }); }));
+  return { pts, perLamp: spec.lamps === "one", target: spec.target || null };
+}
+function roadFluxOf(P, rf) {
+  if (!rf) return null;
+  let F = 0; for (const p of rf.pts) F += evalM(P, p.h, p.v, p.m) * p.w;
+  return rf.perLamp ? F / 2 : F;
+}
+
 function luxOf(P, lamps) { let E = 0; for (const L of lamps) E += evalM(P, L.h, L.v, L.m) * L.f; return E; }
 
 function checkValue(P, c) {
@@ -428,9 +459,11 @@ function evaluate(P, ctx, detail) {
   const t = ctx.targets || {};
   const soft = (a, b, w) => (b ? w * ((a - b) / b) ** 2 : 0);
   cost += soft(imax, t.imax, 10) + soft(flux, t.flux, 10) + soft(sp.spreadH, t.spreadH, 3) + soft(sp.spreadV, t.spreadV, 2);
-  if (ctx.useRoad && !t.flux) cost += 0.02 * flux / 1000;
+  const rfv = ctx.rf ? roadFluxOf(P, ctx.rf) : null;
+  if (rfv != null && ctx.rf.target) cost += soft(rfv, ctx.rf.target, 12);
+  if (ctx.useRoad && !t.flux && !(ctx.rf && ctx.rf.target)) cost += 0.02 * flux / 1000;
   if (!detail) return cost;
-  return { cost, imax, flux, hMax: r.hMax, vMax: r.vMax, sp, rows, roadRows, pass: rows.every(x => x.pass !== false), roadPass: roadRows.every(x => x.pass !== false) };
+  return { cost, imax, flux, roadFlux: rfv, roadFluxTarget: ctx.rf ? ctx.rf.target : null, hMax: r.hMax, vMax: r.vMax, sp, rows, roadRows, pass: rows.every(x => x.pass !== false), roadPass: roadRows.every(x => x.pass !== false) };
 }
 
 function row(e, kind, val, min, max) {
@@ -450,6 +483,7 @@ function buildContext(o) {
     fluxGrid: makeGrid(beam, cut, -90, 90, 1, -60, 40, 0.25),
     table: compileTable(o.table, beam, cut),
     road: compileRoad(o.road, beam, cut),
+    rf: compileRoadFlux(o.roadFlux, beam, cut),
     useRoad: o.useRoad, targets: o.targets
   };
 }
@@ -491,4 +525,4 @@ function makeSolver(ctx, u0, iters) {
   return st;
 }
 
-if (typeof module !== "undefined") module.exports = { PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };
+if (typeof module !== "undefined") module.exports = { ROAD_FLUX_DEFAULTS, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };
