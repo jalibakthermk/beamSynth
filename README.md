@@ -10,7 +10,7 @@ It runs entirely in the browser: open `docs/index.html`, or the GitHub Pages sit
   - **Road requirement (JSON):** give customer requirements on the road and the tool solves for a beam that meets them. The format is the same requirement set used in [road-illuminate](https://github.com/jalibakthermk/Road-illuminate), so one customer-spec file works in both tools.
   - **Beam parameters:** beam function, R149 class, maximum intensity (cd), luminous flux (lm), horizontal spread (±°, half-width at 5 % of Imax), vertical spread (°, height at 5 % of Imax), hot spot position and Q factor.
     - **Hot spot position** (H, V in degrees). Defaults: 75R (1.15R 0.57D) for Class B, mirrored to 75L in left-hand traffic; 0.86D on V-V for the symmetric classes; H-V for the high beam. The solver holds the peak within about 0.1–0.3° of it.
-    - **Q factor** (0–1, default 0.7) shapes the bottom of the beam. At 0 a wide beam forms a "+" (a tall hot spot crossing a flat band); as Q rises the beam bends upward toward the sides and the lower part narrows there, so the isolines curve like a smile. Q does not move the hot spot or change the H spread; a strong smile can deepen the beam on the axis and increase the V spread.
+    - **Q factor** (0–1, default 0.3) shapes the bottom of the beam. At 0 a wide beam forms a "+" (a tall hot spot crossing a flat band); as Q rises the beam bends upward toward the sides and the lower part narrows there, so the isolines curve like a smile. Q does not move the hot spot or change the H spread; a strong smile can deepen the beam on the axis and increase the V spread.
   - Requirement files can be uploaded (click or drag and drop) or pasted.
 - **Flux on road.** The luminous flux that reaches the road surface inside a zone you define (distance from–to, width left and right), for one lamp or the lamp pair. It is a target for the solver, with defaults you can change:
 
@@ -85,9 +85,32 @@ A glare zone at road level on the oncoming lane conflicts with ECE when using ve
 
 ## How the beam is built
 
-The intensity distribution is a sum of three Gaussian lobes (hot spot, spread, foreground). For the low beam it is multiplied by a logistic cut-off (horizontal elbow at 0.57° D with a 15° shoulder for Class B, flat for the symmetric classes, all adjustable) and has a glare-floor term above the cut-off to light the signal points P1–P8. With a Q factor above 0, each lobe's vertical centre rises toward the sides along one smooth bend whose width follows the beam's horizontal spread, and the lower half of each lobe narrows there (the upper half keeps its width). For the low beam the rise stops just below the cut-off. An evolution-strategy solver adjusts the lobes until the ECE table and the road checks are met, staying as close as possible to the requested hot spot, Imax, flux, flux on road and spread.
+Three beam models can be chosen before generating:
 
-The ECE preset values are a starting point. The symmetric class values follow R113 (01 series), which R149 carries over. Check them against the regulation series you certify to and edit the test table in the tool as needed.
+| Model | Hot spot and surroundings | Spread and foreground |
+|---|---|---|
+| **Hybrid** (default) | square-root fall-off | two Gaussian lobes |
+| Smooth √ fall-off | square-root fall-off over the whole beam | – |
+| Lobes | Gaussian hot-spot lobe | two Gaussian lobes |
+
+**Square-root fall-off.** Around the hot spot the intensity follows
+
+    I = A · exp(−k · (√(ρ + ε) − √ε)),   ρ = √((Δh / Rh)² + (Δv / Rv)²)
+
+so ln I falls with the square root of the distance. Rh and Rv are the extents to the left, right, down and up, ρ = 1 is the 5 % isoline, and ε softens the tip. Isolines at evenly stepped levels are packed tightly at the hot spot and widen outward. For the low beam the core is anchored at the cut-off (75R, or 75L in left-hand traffic, for Class B; 0.86D on V-V for the symmetric classes; H-V for the high beam), so the isolines hang from the cut-off as nested half-ovals.
+
+**Hybrid.** The square-root core forms the hot spot and its surroundings; a spread lobe and a foreground lobe add the light needed to reach the road requirement levels. A smoothness rule keeps the beam homogeneous: along rays from the hot spot the decay rate of ln I may only ease off, never steepen again, so no bright blob on a flat band can form.
+
+For the low beam the result is multiplied by a logistic cut-off (horizontal elbow at 0.57° D with a 15° shoulder for Class B, flat for the symmetric classes, all adjustable) and has a glare-floor term above the cut-off to light the signal points P1–P8. The Q factor makes the beam shallower toward the sides (square-root part) and bends the lobes upward there, so the lower isolines curve like a smile.
+
+**Solving in loops.** In road requirement mode the Hybrid and √ models solve in up to four loops:
+
+1. A normal solve. It stops here when ECE passes and at most one road check is missed.
+2. Checks still missed get double weight and a CMA-ES search continues from the best beam so far.
+3. If more than one check still fails, the check missed by the widest margin is left out (marked LEFT OUT in the road table), so the rest can pass.
+4. A final push on what remains.
+
+ECE outranks the road checks in every loop, and the best loop result is kept. The Lobes model uses a single evolution-strategy solve.
 
 ## Repository layout
 

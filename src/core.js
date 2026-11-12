@@ -196,6 +196,8 @@ const SIG_SH = 12, SIG_V = 2, SIG_SV = 2.5;
 function sigAt(h, v) { const a = h / SIG_SH, b = (v - SIG_V) / SIG_SV; return Math.exp(-0.5 * (a * a + b * b)); }
 
 function evalM(P, h, v, m) {
+  if (P.model === "hybrid") return evalHybM(P, h, v, m);
+  if (P.model === "sqrt") return evalSqrtM(P, h, v, m);
   let s = 0;
   if (P.smile) {
     for (const c of P.comps) {
@@ -266,6 +268,8 @@ function evalGridSmile(P, G) {
 }
 
 function evalGrid(P, G) {
+  if (P.model === "hybrid") return evalGridHyb(P, G);
+  if (P.model === "sqrt") return evalGridSqrt(P, G);
   if (P.smile) return evalGridSmile(P, G);
   const { nh, nv, hs, vs, mask, out, env, gh, gv } = G;
   for (let k = 0; k < 3; k++) {
@@ -545,9 +549,10 @@ function evaluate(P, ctx, detail) {
   const roadRows = [];
   for (const c of ctx.road) {
     const cv = checkValue(P, c);
-    if (ctx.useRoad) cost += penalty(cv.val, c.min, c.max, margin);
+    if (ctx.useRoad) cost += (c.w || 1) * penalty(cv.val, c.min, c.max, margin);
     if (detail) roadRows.push(roadRow(c, cv));
   }
+  if (ctx.homogW && P.model === "hybrid") cost += ctx.homogW * kneePenalty(P);
   const t = ctx.targets || {};
   const soft = (a, b, w) => (b ? w * ((a - b) / b) ** 2 : 0);
   cost += soft(imax, t.imax, 10) + soft(flux, t.flux, 10) + soft(sp.spreadH, t.spreadH, t.hot ? 25 : 3) + soft(sp.spreadV, t.spreadV, 2);
@@ -629,4 +634,311 @@ function makeSolver(ctx, u0, iters) {
   return st;
 }
 
-if (typeof module !== "undefined") module.exports = { SMILE, applySmile, ROAD_FLUX_DEFAULTS, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };
+
+// =====================================================================================
+// Square-root fall-off model
+// -------------------------------------------------------------------------------------
+// One smooth intensity distribution around the hot spot (h0, v0):
+//   rho = sqrt((dh / Rh)^2 + (dv / Rv)^2),  Rh = Rl or Rr, Rv = Rd or Ru by side
+//   I   = Imax * exp(-K * (sqrt(rho + eps) - sqrt(eps)) / (sqrt(1 + eps) - sqrt(eps)))
+// so log I falls with the square root of the distance and rho = 1 is the 5 % isoline (K = ln 20).
+// Isolines at evenly stepped levels are tightly packed at the hot spot and spread outward.
+// eps softens the tip of the hot spot. For the low beam the cut-off mask cuts the top, so the
+// isolines hang from the cut-off as nested half-ovals. Q makes the beam shallower toward the sides.
+const SQ = { K: Math.log(20) };
+// exp(-x) table for 0 <= x < 40 (linear interpolation, relative error below 1e-5)
+const EXPN = (() => { const n = 8192, t = new Float64Array(n + 2); for (let i = 0; i <= n + 1; i++) t[i] = Math.exp(-i * 40 / n); return { t, k: n / 40, max: 40 }; })();
+function expNeg(x) { if (x >= EXPN.max) return 0; const y = x * EXPN.k, i = y | 0, f = y - i; return EXPN.t[i] + (EXPN.t[i + 1] - EXPN.t[i]) * f; }
+const BOUNDS_S = {
+  low: [["log", 2000, 150000], ["lin", 0, 1], ["lin", 0, 1], ["log", 2, 70], ["log", 2, 70], ["log", 0.8, 20], ["log", 0.3, 6], ["log", 0.002, 0.6], ["log", 10, 600], ["lin", 0, 4], ["lin", 0, 4]],
+  high: [["log", 5000, 260000], ["lin", 0, 1], ["lin", 0, 1], ["log", 2, 70], ["log", 2, 70], ["log", 0.8, 20], ["log", 0.8, 20], ["log", 0.002, 0.6], ["log", 1, 2], ["lin", 0, 4], ["lin", 0, 4]]
+};
+function sqrtRel(P, h, v) {
+  const dh = h - P.h0, d = dh / P.bw, bend = 1 - expNeg(0.5 * d * d);
+  // droop: the beam centre sinks gradually toward each side (darker just under the cut-off out there)
+  const dv = v - P.v0 + (dh < 0 ? P.dL : P.dR) * bend;
+  // Q: the beam gets shallower toward the sides (downward extent shrinks smoothly), so the lower isolines smile
+  let Rd = P.Rd;
+  if (P.q && dv < 0) Rd *= 1 - P.q * bend;
+  const a = dh / (dh < 0 ? P.Rl : P.Rr), b = dv / (dv < 0 ? Rd : P.Ru), rho = Math.sqrt(a * a + b * b);
+  return expNeg(P.kn * (Math.sqrt(rho + P.eps) - P.se));
+}
+function evalSqrtM(P, h, v, m) {
+  let s = P.A * sqrtRel(P, h, v);
+  if (P.beam === "low") s = s * m + P.sigA * sigAt(h, v);
+  return s;
+}
+function evalGridSqrt(P, G) {
+  const { nh, nv, hs, vs, mask, out, env } = G, low = P.beam === "low";
+  // per-column terms (depend on h only): 1/Rh^2 * dh^2, droop shift, Q-shrunk downward extent
+  const ah = G.sqA || (G.sqA = new Float64Array(nh)), sh = G.sqS || (G.sqS = new Float64Array(nh)), rd = G.sqR || (G.sqR = new Float64Array(nh));
+  for (let i = 0; i < nh; i++) {
+    const dh = hs[i] - P.h0, d = dh / P.bw, bend = 1 - expNeg(0.5 * d * d), a = dh / (dh < 0 ? P.Rl : P.Rr);
+    ah[i] = a * a; sh[i] = (dh < 0 ? P.dL : P.dR) * bend; rd[i] = 1 / (P.Rd * (P.q ? 1 - P.q * bend : 1));
+  }
+  const iRu = 1 / P.Ru, kn = P.kn, eps = P.eps, se = P.se, A = P.A;
+  let max = -1, mi = 0, mj = 0, flux = 0;
+  env.fill(0);
+  for (let j = 0; j < nv; j++) {
+    const row = j * nh, sv = low ? G.sgv[j] * P.sigA : 0, dv0 = vs[j] - P.v0; let rowSum = 0;
+    for (let i = 0; i < nh; i++) {
+      const dv = dv0 + sh[i], b = dv * (dv < 0 ? rd[i] : iRu);
+      let s = A * expNeg(kn * (Math.sqrt(Math.sqrt(ah[i] + b * b) + eps) - se));
+      if (low) s = s * mask[row + i] + G.sgh[i] * sv;
+      out[row + i] = s; rowSum += s;
+      if (s > env[i]) env[i] = s;
+      if (s > max) { max = s; mi = i; mj = j; }
+    }
+    flux += rowSum * G.dOm[j];
+  }
+  return { imax: max, hMax: hs[mi], vMax: vs[mj], mi, mj, flux };
+}
+// hot spot: default 75R (Class B), 0.86D (symmetric), H-V (high beam), or the user's value;
+// the model centre may sit a little off it so the masked peak lands on the target
+function sqrtHotDefault(beam, cut) { return beam === "high" ? { h: 0, v: 0 } : cut && cut.sym ? { h: 0, v: -0.86 } : { h: 1.15, v: -0.57 }; }
+function decodeS(u, beam, cut, opt) {
+  const B = BOUNDS_S[beam], x = u.map((ui, i) => decodeVal(B[i], ui));
+  const hot = (opt && opt.hot) || sqrtHotDefault(beam, cut);
+  const h0 = cut && cut.sym ? 0 : hot.h + (cut ? -0.8 + x[1] : -0.3 + 0.6 * x[1]);
+  const v0 = hot.v + (cut ? -0.15 + 0.75 * x[2] : -0.3 + 0.6 * x[2]);
+  let Rl = x[3], Rr = x[4], dL = x[9], dR = x[10];
+  if (cut && cut.sym) { Rl = Rr = Math.sqrt(Rl * Rr); dL = dR = (dL + dR) / 2; }
+  const eps = x[7], se = Math.sqrt(eps), kn = SQ.K / (Math.sqrt(1 + eps) - se);
+  const S = (opt && opt.smile) || 0;
+  return { model: "sqrt", beam, cut, A: x[0], h0, v0, Rl, Rr, Rd: x[5], Ru: x[6], eps, se, kn,
+    q: 0.65 * S, bw: Math.max(Rl, Rr) * 0.5, smile: 0, dL, dR, sigA: beam === "low" ? x[8] : 0 };
+}
+function initSqrt(beam, cut, t, opt) {
+  const hot = (opt && opt.hot) || sqrtHotDefault(beam, cut);
+  const S = t.spreadH || (beam === "low" ? 14 : 12), V = t.spreadV || (beam === "low" ? 4 : 6);
+  const phys = [t.imax || (beam === "low" ? 30000 : 90000), 0.8, 0.3,
+    Math.max(2.5, S + (cut && !cut.sym ? hot.h : 0)), Math.max(2.5, S - (cut && !cut.sym ? hot.h : 0)),
+    beam === "low" ? Math.max(1, V * 1.1) : V / 2, beam === "low" ? 1.5 : V / 2, 0.05, beam === "low" ? 220 : 1.5, 0.1, 0.1];
+  return phys.map((x, i) => encodeVal(BOUNDS_S[beam][i], x));
+}
+function makeSolverS(ctx, u0, iters, seed, dec) {
+  const rng = mulberry(seed || 4242), beam = ctx.beam, n = u0.length, D = dec || decodeS;
+  const f = u => evaluate(D(u, beam, ctx.cut, ctx.shape), ctx, false);
+  const st = { best: u0.slice(), fbest: f(u0), step: 0.1, it: 0, iters };
+  st.run = function (k) {
+    const end = Math.min(st.iters, st.it + k);
+    for (; st.it < end; st.it++) {
+      if (st.it > 0 && st.it % Math.floor(st.iters / 3) === 0) st.step = 0.1;
+      const c = new Array(n);
+      for (let i = 0; i < n; i++) c[i] = Math.min(1, Math.max(0, st.best[i] + st.step * randn(rng)));
+      const fc = f(c);
+      if (fc < st.fbest) { st.best = c; st.fbest = fc; st.step = Math.min(0.3, st.step * 1.25); }
+      else st.step = Math.max(0.002, st.step * 0.955);
+    }
+    return st.it >= st.iters;
+  };
+  return st;
+}
+
+// sep-CMA-ES (diagonal covariance) on the unit box for objective f. run(k) does k evaluations.
+function makeCMA(f, u0, iters, sigma0, seed) {
+  const n = u0.length, rng = mulberry(seed || 777);
+  const lam = 4 + Math.floor(3 * Math.log(n)), mu = Math.floor(lam / 2);
+  let w = []; for (let i = 0; i < mu; i++) w.push(Math.log(mu + 0.5) - Math.log(i + 1));
+  const ws = w.reduce((a, b) => a + b, 0); w = w.map(x => x / ws);
+  const mueff = 1 / w.reduce((a, b) => a + b * b, 0);
+  const cs = (mueff + 2) / (n + mueff + 5), ds = 1 + 2 * Math.max(0, Math.sqrt((mueff - 1) / (n + 1)) - 1) + cs;
+  const cc = (4 + mueff / n) / (n + 4 + 2 * mueff / n);
+  const c1 = Math.min(1, 2 / ((n + 1.3) ** 2 + mueff) * (n + 2) / 3);
+  const cmu = Math.min(1 - c1, 2 * (mueff - 2 + 1 / mueff) / ((n + 2) ** 2 + mueff) * (n + 2) / 3);
+  const chiN = Math.sqrt(n) * (1 - 1 / (4 * n) + 1 / (21 * n * n));
+  let m = u0.slice(), sig = sigma0 || 0.1, gen = 0, pop = [];
+  const C = new Array(n).fill(1), pc = new Array(n).fill(0), ps = new Array(n).fill(0);
+  const st = { best: u0.slice(), fbest: f(u0), it: 0, iters };
+  st.run = function (k) {
+    const end = Math.min(st.iters, st.it + k);
+    while (st.it < end) {
+      const x = new Array(n);
+      for (let i = 0; i < n; i++) x[i] = Math.min(1, Math.max(0, m[i] + sig * Math.sqrt(C[i]) * randn(rng)));
+      const fx = f(x); st.it++;
+      if (fx < st.fbest) { st.fbest = fx; st.best = x.slice(); }
+      pop.push([fx, x]);
+      if (pop.length < lam) continue;
+      pop.sort((a, b) => a[0] - b[0]);
+      const mOld = m; m = new Array(n).fill(0);
+      for (let r = 0; r < mu; r++) for (let i = 0; i < n; i++) m[i] += w[r] * pop[r][1][i];
+      const yw = m.map((mi, i) => (mi - mOld[i]) / sig);
+      for (let i = 0; i < n; i++) ps[i] = (1 - cs) * ps[i] + Math.sqrt(cs * (2 - cs) * mueff) * yw[i] / Math.sqrt(C[i]);
+      const psn = Math.sqrt(ps.reduce((a, b) => a + b * b, 0)); gen++;
+      const hsig = psn / Math.sqrt(1 - (1 - cs) ** (2 * gen)) / chiN < 1.4 + 2 / (n + 1) ? 1 : 0;
+      for (let i = 0; i < n; i++) {
+        pc[i] = (1 - cc) * pc[i] + hsig * Math.sqrt(cc * (2 - cc) * mueff) * yw[i];
+        let rank = 0; for (let r = 0; r < mu; r++) { const y = (pop[r][1][i] - mOld[i]) / sig; rank += w[r] * y * y; }
+        C[i] = Math.max(1e-6, (1 - c1 - cmu) * C[i] + c1 * (pc[i] * pc[i] + (1 - hsig) * cc * (2 - cc) * C[i]) + cmu * rank);
+      }
+      sig = Math.min(0.5, sig * Math.exp(cs / ds * (psn / chiN - 1)));
+      if (!(sig > 0)) sig = 0.05;
+      pop = [];
+    }
+    return st.it >= st.iters;
+  };
+  return st;
+}
+
+
+// =====================================================================================
+// Hybrid model: square-root core + lobes for the spread and the foreground
+// -------------------------------------------------------------------------------------
+// Area 1, hot spot and its surroundings: the square-root fall-off anchored at the cut-off
+//   I = As * exp(-k (sqrt(rho + eps) - sqrt(eps))), rho = 1 at 5 % of As (left/right/down/up extents).
+// Area 2, spread and foreground: two Gaussian lobes, free to reach the road requirement levels.
+// A smoothness rule (kneePenalty) keeps the whole beam homogeneous: along rays from the hot spot
+// the decay rate of log I may only ease off, never steepen again, so no bright blob on a flat band.
+const BOUNDS_Y = {
+  low: [["log", 2000, 150000], ["lin", 0, 1], ["lin", 0, 1], ["log", 1.5, 40], ["log", 1.5, 40], ["log", 0.5, 8], ["log", 0.3, 6], ["log", 0.002, 0.6], ["log", 10, 600],
+    ["log", 100, 60000], ["lin", -4, 4], ["lin", -5, -0.4], ["log", 2, 40], ["log", 0.6, 6],
+    ["log", 30, 20000], ["lin", -14, -1.5], ["log", 8, 70], ["log", 1.5, 15]],
+  high: [["log", 5000, 260000], ["lin", 0, 1], ["lin", 0, 1], ["log", 1.5, 40], ["log", 1.5, 40], ["log", 0.6, 12], ["log", 0.6, 12], ["log", 0.002, 0.6], ["log", 1, 2],
+    ["log", 200, 150000], ["lin", -2, 2], ["lin", -2.5, 1], ["log", 3, 40], ["log", 1, 10],
+    ["log", 30, 30000], ["lin", -10, -1], ["log", 10, 70], ["log", 2, 15]]
+};
+function decodeY(u, beam, cut, opt) {
+  const B = BOUNDS_Y[beam], x = u.map((ui, i) => decodeVal(B[i], ui));
+  const hot = (opt && opt.hot) || sqrtHotDefault(beam, cut), sym = cut && cut.sym;
+  const h0 = sym ? 0 : hot.h + (cut ? -0.8 + x[1] : -0.3 + 0.6 * x[1]);
+  const v0 = hot.v + (cut ? -0.15 + 0.75 * x[2] : -0.3 + 0.6 * x[2]);
+  let Rl = x[3], Rr = x[4]; if (sym) Rl = Rr = Math.sqrt(Rl * Rr);
+  const eps = x[7], se = Math.sqrt(eps), S = (opt && opt.smile) || 0;
+  const L = [{ A: x[9], h: sym ? 0 : x[10], v: x[11], sh: x[12], sv: x[13] }, { A: x[14], h: 0, v: x[15], sh: x[16], sv: x[17] }];
+  const W = Math.max(L[0].sh, Rl, Rr), ref = cut ? cut.elbow - 0.3 : null;
+  for (const c of L) {   // Q for the lobes: rise toward the sides, lower half narrows
+    c.rise = !(S > 0) ? 0 : ref != null ? Math.min(6 * S, S * Math.max(0, ref - c.v)) : S * 0.6 * c.sv; c.thin = 0.6 * Math.min(1, S);
+  }
+  return { model: "hybrid", beam, cut, A: x[0], h0, v0, Rl, Rr, Rd: x[5], Ru: x[6], eps, se, kn: SQ.K / (Math.sqrt(1 + eps) - se),
+    q: 0.65 * S, bw: Math.max(Rl, Rr) * 0.5, dL: 0, dR: 0, smile: 0, sigA: beam === "low" ? x[8] : 0, lobes: L, lw: W };
+}
+function lobeVal(c, dhc, h, v, W) {
+  const a = (h - c.h) / c.sh; if (a * a > 60) return 0;
+  let vc = c.v, sv = c.sv;
+  if (c.rise || c.thin) { const d = dhc / W, bend = 1 - expNeg(0.5 * d * d); vc += c.rise * bend; if (v < vc) sv *= 1 - c.thin * bend; }
+  const b = (v - vc) / sv;
+  return c.A * expNeg(0.5 * (a * a + b * b));
+}
+function evalHybM(P, h, v, m) {
+  let s = P.A * sqrtRel(P, h, v);
+  for (const c of P.lobes) s += lobeVal(c, h - P.h0, h, v, P.lw);
+  if (P.beam === "low") s = s * m + P.sigA * sigAt(h, v);
+  return s;
+}
+function evalGridHyb(P, G) {
+  const { nh, nv, hs, vs, mask, out, env } = G, low = P.beam === "low";
+  const ah = G.sqA || (G.sqA = new Float64Array(nh)), rd = G.sqR || (G.sqR = new Float64Array(nh));
+  const L = P.lobes, nl = L.length;
+  const la = G.hyA || (G.hyA = [new Float64Array(nh), new Float64Array(nh)]), lv = G.hyV || (G.hyV = [new Float64Array(nh), new Float64Array(nh)]);
+  const lsl = G.hyL || (G.hyL = [new Float64Array(nh), new Float64Array(nh)]), lsu = G.hyU || (G.hyU = [new Float64Array(nh), new Float64Array(nh)]);
+  for (let i = 0; i < nh; i++) {
+    const dh = hs[i] - P.h0, d = dh / P.bw, bend = 1 - expNeg(0.5 * d * d), a = dh / (dh < 0 ? P.Rl : P.Rr);
+    ah[i] = a * a; rd[i] = 1 / (P.Rd * (P.q ? 1 - P.q * bend : 1));
+    const d2 = dh / P.lw, bend2 = 1 - expNeg(0.5 * d2 * d2);
+    for (let k = 0; k < nl; k++) {
+      const c = L[k], aa = (hs[i] - c.h) / c.sh;
+      la[k][i] = aa * aa > 60 ? 0 : c.A * expNeg(0.5 * aa * aa);
+      lv[k][i] = c.v + c.rise * bend2; lsu[k][i] = 1 / c.sv; lsl[k][i] = 1 / (c.sv * (1 - c.thin * bend2));
+    }
+  }
+  const iRu = 1 / P.Ru, kn = P.kn, eps = P.eps, se = P.se, A = P.A;
+  let max = -1, mi = 0, mj = 0, flux = 0;
+  env.fill(0);
+  for (let j = 0; j < nv; j++) {
+    const row = j * nh, sv = low ? G.sgv[j] * P.sigA : 0, vj = vs[j], dv = vj - P.v0; let rowSum = 0;
+    for (let i = 0; i < nh; i++) {
+      const b = dv * (dv < 0 ? rd[i] : iRu);
+      let s = A * expNeg(kn * (Math.sqrt(Math.sqrt(ah[i] + b * b) + eps) - se));
+      for (let k = 0; k < nl; k++) { const amp = la[k][i]; if (amp) { const t = vj - lv[k][i], bb = t * (t < 0 ? lsl[k][i] : lsu[k][i]); s += amp * expNeg(0.5 * bb * bb); } }
+      if (low) s = s * mask[row + i] + G.sgh[i] * sv;
+      out[row + i] = s; rowSum += s;
+      if (s > env[i]) env[i] = s;
+      if (s > max) { max = s; mi = i; mj = j; }
+    }
+    flux += rowSum * G.dOm[j];
+  }
+  return { imax: max, hMax: hs[mi], vMax: vs[mj], mi, mj, flux };
+}
+// smoothness rule: along 7 rays from the hot spot (below the cut-off), the decay rate of ln I
+// should only ease off outward. Each re-steepening adds to the penalty, relative to the ray's total drop.
+const KNEE_RAYS = [[-1, 0], [1, 0], [0, -1], [-1, -0.12], [1, -0.12], [-1, -0.3], [1, -0.3]];
+function kneePenalty(P) {
+  const low = P.beam === "low", vS = low ? -0.25 : 0, top = P.A + P.lobes[0].A;
+  let pen = 0;
+  for (const [ux, uy] of KNEE_RAYS) {
+    const len = uy === -1 ? 12 : 40, n = 32;
+    let prevL = null, prevS = null, drop = 0, rise = 0;
+    for (let k = 0; k <= n; k++) {
+      const t = (k / n) * (k / n) * len;          // denser near the hot spot
+      const h = P.h0 + ux * t, v = P.v0 + vS + (uy === -1 ? -t : uy * t);
+      const I = evalHybM(P, h, v, 1);
+      if (I < 0.01 * top) break;
+      const L = Math.log(I);
+      if (prevL != null) {
+        const s = (prevL - L) / Math.max(1e-6, t - (k === 0 ? 0 : ((k - 1) / n) * ((k - 1) / n) * len));
+        if (prevS != null && s > prevS) rise += (s - prevS);
+        drop += Math.max(0, prevL - L); prevS = s;
+      }
+      prevL = L;
+    }
+    if (drop > 0) pen += rise / (1 + drop);
+  }
+  return pen;
+}
+function initHybrid(beam, cut, t, opt) {
+  const base = initSqrt(beam, cut, t, opt).slice(0, 9).map((u, i) => decodeVal(BOUNDS_S[beam][i], u));
+  const lob = initPhysical(beam, t, cut).comps;
+  base[3] *= 0.7; base[4] *= 0.7;                    // core a little tighter than the whole beam
+  const phys = [...base, lob[1].A, lob[1].h, lob[1].v, lob[1].sh, lob[1].sv, lob[2].A, lob[2].v, lob[2].sh, lob[2].sv];
+  return phys.map((x, i) => encodeVal(BOUNDS_Y[beam][i], x));
+}
+
+// Multi-loop solve for the square-root model (road requirement mode).
+// Loop 1 solves normally. After each loop, road checks that still fail get three times the weight
+// (up to 40x) and the next loop continues from the best beam so far; ECE weight is raised so it
+// stays ahead of the road checks. Stops when ECE passes and at most `allow` road checks fail,
+// or after maxLoops. The best loop result is kept (fewest ECE fails, then fewest road misses).
+function makeLoopSolverS(ctx, u0, opt) {
+  const o = Object.assign({ maxLoops: 4, first: 1500, next: 900, allow: 1, dec: decodeS }, opt || {});
+  const beam = ctx.beam, saved = { w: ctx.road.map(c => c.w), ece: ctx.eceWeight }, D = o.dec;
+  const st = { loop: 1, maxLoops: o.maxLoops, it: 0, iters: o.first + (o.maxLoops - 1) * o.next, done: false, cands: [] };
+  let inner = makeSolverS(ctx, u0, o.first, 4242, D), base = 0;
+  const score = u => {
+    const r = evaluate(D(u, beam, ctx.cut, ctx.shape), Object.assign({}, ctx, { useRoad: true }), true);
+    const ece = r.rows.filter(x => x.pass === false).length, fails = r.roadRows.map((x, i) => x.pass === false ? i : -1).filter(i => i >= 0);
+    let short = 0; r.roadRows.forEach(x => { if (x.pass === false) short += Math.abs(x.margin); });
+    return { u, ece, fails, miss: fails.length, short, margins: r.roadRows.map(x => x.margin) };
+  };
+  st.run = function (k) {
+    if (st.done) return true;
+    const doneInner = inner.run(k);
+    st.it = base + inner.it;
+    if (!doneInner) return false;
+    const c = score(inner.best); st.cands.push(c);
+    const good = c.ece === 0 && c.miss <= o.allow, prev = st.cands.length > 1 ? st.cands[st.cands.length - 2] : null;
+    if (good || st.loop >= o.maxLoops || !ctx.useRoad) { st.finish(); return true; }
+    const best0 = st.pick();
+    if (st.loop === 2 && best0.miss > o.allow) {
+      // benevolent step: leave out the check missed by the widest margin, push the rest harder
+      let worst = -1, wm = 0;
+      best0.fails.forEach(i => { const m = Math.abs(best0.margins[i]); if (m > wm) { wm = m; worst = i; } });
+      if (worst >= 0) { ctx.road[worst].w = 0.05; st.leftOut = ctx.road[worst].label || ctx.road[worst].id; }
+    }
+    c.fails.forEach(i => { if ((ctx.road[i].w || 1) >= 1) ctx.road[i].w = Math.min(20, (ctx.road[i].w || 1) * 2); });
+    ctx.eceWeight = Math.max(5, ...ctx.road.map(r => r.w || 1));
+    base += inner.iters; st.loop++;
+    const best = st.pick();
+    // later loops use CMA-ES (adapts its step per parameter) from the best beam so far
+    inner = makeCMA(u => evaluate(D(u, beam, ctx.cut, ctx.shape), ctx, false), best.u, o.next, 0.12, 4242 + 977 * st.loop);
+    return false;
+  };
+  st.pick = () => st.cands.slice().sort((a, b) => a.ece - b.ece || a.miss - b.miss || a.short - b.short)[0];
+  st.finish = () => {
+    st.done = true; st.it = st.iters;
+    const b = st.pick(); st.best = b.u; st.result = b;
+    ctx.road.forEach((c, i) => { c.w = saved.w[i]; }); ctx.eceWeight = saved.ece;
+  };
+  return st;
+}
+
+if (typeof module !== "undefined") module.exports = { decodeY, initHybrid, kneePenalty, makeLoopSolverS, decodeS, initSqrt, makeSolverS, sqrtRel, SMILE, applySmile, ROAD_FLUX_DEFAULTS, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };

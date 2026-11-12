@@ -156,18 +156,28 @@ function generate() {
   const ctx = buildContext({ beam: c.beam, cut: c.cut, table: c.table,
     road: { checks: c.checks, height: c.H, spacing: c.sp, plane: $("plane").value, traffic: c.lht ? "LHT" : "RHT", evalH: c.evalH },
     useRoad: c.mode === "road", targets: c.targets, roadFlux: c.roadFlux, shape: c.shape });
-  const u0 = encode(initPhysical(c.beam, c.targets, c.cut), c.beam);
-  const iters = 2400, solver = makeSolver(ctx, u0, iters);
+  c.model = (document.querySelector('input[name="model"]:checked') || {}).value || "hybrid";
+  const hy = c.model === "hybrid", sq = c.model === "sqrt" || hy, dec = hy ? decodeY : decodeS;
+  if (hy) ctx.homogW = 2;
+  const iters = sq ? 1500 : 2400;
+  const solver = sq ? makeLoopSolverS(ctx, hy ? initHybrid(c.beam, c.cut, c.targets, c.shape) : initSqrt(c.beam, c.cut, c.targets, c.shape), { dec, first: hy ? 1200 : 1500 })
+    : makeSolver(ctx, encode(initPhysical(c.beam, c.targets, c.cut), c.beam), iters);
+  let shownLoop = 0;
   const tick = () => {
     const done = solver.run(60);
-    $("progBar").style.width = (100 * solver.it / iters) + "%";
+    $("progBar").style.width = (100 * solver.it / solver.iters) + "%";
+    if (sq && solver.loop !== shownLoop && !done) { shownLoop = solver.loop; msg(solver.loop === 1 ? "Solving…" : `Loop ${solver.loop} of ${solver.maxLoops}: working on the checks still missed…`); }
     if (!done) { setTimeout(tick, 0); return; }
-    S.P = decode(solver.best, c.beam, c.cut, c.shape); S.cfg = c;
+    c.loops = sq ? solver.cands.length : 1;
+    c.leftOut = sq && solver.leftOut && solver.result && solver.result.miss ? solver.leftOut : null;
+    S.P = sq ? dec(solver.best, c.beam, c.cut, c.shape) : decode(solver.best, c.beam, c.cut, c.shape); S.cfg = c;
     S.res = evaluate(S.P, Object.assign({}, ctx, { useRoad: true }), true);
     S.ctx = ctx;
     S.busy = false; $("go").disabled = false;
     const nf = S.res.rows.filter(r => r.pass === false).length, nr = S.res.roadRows.filter(r => r.pass === false).length;
-    msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : "All ECE checks pass.") + (nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : ""), nf > 0);
+    const loopsTxt = c.loops > 1 ? ` after ${c.loops} loops` : "";
+    const leftTxt = c.leftOut && S.res.roadRows.some(r => r.pass === false && r.id === c.leftOut) ? ` Left out: “${c.leftOut}”, which conflicts with the other checks.` : "";
+    msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s${loopsTxt}. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : "All ECE checks pass.") + (nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : " All road checks pass.") + leftTxt, nf > 0);
     $("iesOut").value = "";
     renderAll();
   };
@@ -397,6 +407,7 @@ hookRead($("isoCv"), "iso"); hookRead($("roadCv"), "road");
 // ---------- summary + tables ----------
 function kv(label, value, sub, cls) { return `<div class="kv ${cls || ""}"><b>${label}</b><span>${value}</span>${sub ? `<em>${sub}</em>` : ""}</div>`; }
 function req(r, unit) { const p = []; if (r.min != null) p.push("≥ " + (unit === "lx" ? fmt(r.min, 2) : fmtCd(r.min))); if (r.max != null) p.push("≤ " + (unit === "lx" ? fmt(r.max, 2) : fmtCd(r.max))); return p.join(", ") || "info"; }
+function pillRoad(r) { return r.pass === false && S.cfg && S.cfg.leftOut === r.id ? '<span class="pill i" title="Left out: it conflicts with the other checks">LEFT OUT</span>' : pill(r.pass); }
 function pill(p) { return p === true ? '<span class="pill p">PASS</span>' : p === false ? '<span class="pill f">FAIL</span>' : '<span class="pill i">INFO</span>'; }
 
 function renderSummary() {
@@ -436,13 +447,15 @@ function renderTables() {
   const vfmt = r => r.unit === "m" ? (r.check.type === "range" && r.reach == null ? "not reached" : fmt(r.val, 1) + " m") : fmt(r.val, 2) + " lx";
   const rq = r => (r.min != null ? "≥ " + fmt(r.min, r.unit === "m" ? 0 : 2) : "≤ " + fmt(r.max, r.unit === "m" ? 0 : 2)) + " " + r.unit;
   $("rdTbl").innerHTML = S.res.roadRows.length ? "<thead><tr><th>Check</th><th>Type</th><th>Where</th><th>Requirement</th><th>Value</th><th></th></tr></thead><tbody>" +
-    S.res.roadRows.map(r => `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>${r.check.type}</td><td>${where(r.check)}${r.check.zEval ? `, z ${fmt(r.check.zEval, 2)} m` : ""}</td><td class="n">${rq(r)}</td><td class="n">${vfmt(r)}</td><td>${pill(r.pass)}</td></tr>`).join("") + "</tbody>"
+    S.res.roadRows.map(r => `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>${r.check.type}</td><td>${where(r.check)}${r.check.zEval ? `, z ${fmt(r.check.zEval, 2)} m` : ""}</td><td class="n">${rq(r)}</td><td class="n">${vfmt(r)}</td><td>${pillRoad(r)}</td></tr>`).join("") + "</tbody>"
     : `<tbody><tr><td class="note" style="white-space:normal">No road checks for this beam function. Switch to Road requirement mode or paste a requirement set.</td></tr></tbody>`;
 }
 
 function setCount(id, rows) {
-  const el = $(id), n = rows.filter(r => r.pass != null).length, f = rows.filter(r => r.pass === false).length;
-  el.textContent = !n ? "" : f ? `${f} OF ${n} FAIL` : `ALL ${n} PASS`;
+  const el = $(id), n = rows.filter(r => r.pass != null).length;
+  const lo = id === "rdCount" && S.cfg && S.cfg.leftOut && rows.some(r => r.pass === false && r.id === S.cfg.leftOut) ? 1 : 0;
+  const f = rows.filter(r => r.pass === false).length - lo;
+  el.textContent = !n ? "" : f ? `${f} OF ${n} FAIL` : lo ? `${n - 1} OF ${n} PASS · 1 LEFT OUT` : `ALL ${n} PASS`;
   el.className = "cnt" + (!n ? "" : f ? " f" : " p");
 }
 
@@ -476,6 +489,7 @@ function buildIES() {
     `[_IMAX] ${Math.round(S.res.imax)} cd`, `[_FLUX] ${Math.round(S.res.flux)} lm`,
     `[_ROADFLUX] ${Math.round(S.res.roadFlux)} lm, ${c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair"}, ${c.roadFlux.zone.x1}-${c.roadFlux.zone.x2} m, ${c.roadFlux.zone.left} m L / ${c.roadFlux.zone.right} m R`,
     ...(c.shape ? [`[_QFACTOR] ${c.shape.smile}`] : []),
+    `[_MODEL] ${S.P.model === "hybrid" ? "hybrid: square-root core + lobes" : S.P.model === "sqrt" ? "square-root fall-off" : "Gaussian lobes"}`,
     `[_GENERATED] ${new Date().toISOString().slice(0, 10)}`,
     "TILT=NONE",
     `1 -1 1 ${V.length} ${H.length} 2 2 0 0 0`, "1 1 0"];
@@ -512,6 +526,25 @@ async function copy(text, btn) {
 $("iesCopy").onclick = () => { if (!S.res) return; if (!$("iesOut").value) $("iesOut").value = buildIES(); copy($("iesOut").value, $("iesCopy")); };
 $("paramCopy").onclick = () => {
   if (!S.P) return;
+  if (S.P.model === "hybrid") {
+    const r2 = x => Math.round(x * 1000) / 1000, P = S.P;
+    const o = { function: S.cfg.beam, class: S.cfg.cls, traffic: S.cfg.lht ? "LHT" : "RHT", model: "hybrid: square-root core + lobes", note: "Internal frame is RHT; LHT mirrors H.",
+      cutoff: S.cfg.beam === "low" ? S.cfg.cut : null,
+      core: { law: "I = A * exp(-k * (sqrt(rho + eps) - sqrt(eps))), rho = 1 at 5 % of A", A_cd: Math.round(P.A), centre_deg: { h: r2(P.h0), v: r2(P.v0) },
+        extent_deg: { left: r2(P.Rl), right: r2(P.Rr), down: r2(P.Rd), up: r2(P.Ru) }, k: r2(P.kn), eps: r2(P.eps) },
+      lobes: P.lobes.map((c, i) => ({ name: ["spread", "foreground"][i], A_cd: Math.round(c.A), h_deg: r2(c.h), v_deg: r2(c.v), sigmaH_deg: r2(c.sh), sigmaV_deg: r2(c.sv) })),
+      qFactor: S.cfg.shape ? S.cfg.shape.smile : 0, glareFloor_cd: S.cfg.beam === "low" ? Math.round(P.sigA) : 0 };
+    const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy")); return;
+  }
+  if (S.P.model === "sqrt") {
+    const r2 = x => Math.round(x * 1000) / 1000, P = S.P;
+    const o = { function: S.cfg.beam, class: S.cfg.cls, traffic: S.cfg.lht ? "LHT" : "RHT", model: "square-root fall-off",
+      law: "I = Imax * exp(-k * (sqrt(rho + eps) - sqrt(eps))), rho = 1 at the 5 % isoline", note: "Internal frame is RHT; LHT mirrors H.",
+      cutoff: S.cfg.beam === "low" ? S.cfg.cut : null, Imax_cd: Math.round(P.A), centre_deg: { h: r2(P.h0), v: r2(P.v0) },
+      extent_5pct_deg: { left: r2(P.Rl), right: r2(P.Rr), down: r2(P.Rd), up: r2(P.Ru) }, k: r2(P.kn), eps: r2(P.eps),
+      qFactor: S.cfg.shape ? S.cfg.shape.smile : 0, glareFloor_cd: S.cfg.beam === "low" ? Math.round(P.sigA) : 0 };
+    const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy")); return;
+  }
   const r2 = x => Math.round(x * 1000) / 1000;
   const o = { function: S.cfg.beam, class: S.cfg.cls, traffic: S.cfg.lht ? "LHT" : "RHT", note: "Internal frame is RHT; LHT mirrors H.", cutoff: S.cfg.beam === "low" ? S.cfg.cut : null,
     lobes: S.P.comps.map((c, i) => ({ name: ["hot spot", "spread", "foreground"][i], A_cd: Math.round(c.A), h_deg: r2(c.h), v_deg: r2(c.v), sigmaH_deg: r2(c.sh), sigmaV_deg: r2(c.sv) })),

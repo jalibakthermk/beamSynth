@@ -64,6 +64,14 @@ input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-vis
 .sval{font:600 13px var(--f-mono);color:var(--ink);margin-left:4px}
 input[type=range]{padding:0;background:transparent;border:0;accent-color:var(--accent);height:24px}
 .srow{display:flex;justify-content:space-between}
+.radios{display:flex;flex-direction:column;gap:6px}
+.rad{display:flex;gap:9px;align-items:flex-start;padding:7px 9px;border:1px solid var(--line);border-radius:5px;background:var(--sunk);cursor:pointer}
+.rad input{width:auto;margin:2px 0 0;accent-color:var(--accent)}
+.rad span{display:flex;flex-direction:column;gap:1px;min-width:0}
+.rad b{font-size:13.5px;font-weight:600}
+.rad small{font:12px var(--f-mono);color:var(--muted)}
+.rad:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.rad:focus-within{outline:2px solid var(--accent);outline-offset:1px}
 .go{font:700 16px var(--f-display);letter-spacing:.04em;background:var(--accent);color:var(--accent-ink);border:0;border-radius:5px;padding:11px;cursor:pointer;width:100%}
 .go:disabled{opacity:.6;cursor:progress}
 .prog{height:4px;background:var(--sunk);border-radius:2px;overflow:hidden}
@@ -181,8 +189,8 @@ footer a:hover{color:var(--ink)}
       <label class="f">Hot spot H (°)<input id="hotH" type="number" step="0.05" value="1.15"><small>+ right, − left</small></label>
       <label class="f">Hot spot V (°)<input id="hotV" type="number" step="0.01" value="-0.57"><small>+ up, − down</small></label>
     </div>
-    <label class="f">Q factor <span class="sval" id="smileVal">0.70</span>
-      <input id="smile" type="range" min="0" max="1" step="0.05" value="0.7">
+    <label class="f">Q factor <span class="sval" id="smileVal">0.30</span>
+      <input id="smile" type="range" min="0" max="1" step="0.05" value="0.3">
       <small class="srow"><span>0 · “+” shape</span><span>1 · strong smile</span></small>
     </label>
     <p class="note">Q bends the bottom of the beam upward toward the sides, so the isolines curve like a smile instead of crossing as a “+”. It does not move the hot spot or change the H spread. Default hot spot: 75R (75L in LHT) for Class B, 0.86D on V-V for symmetric classes, H-V for the high beam.</p>
@@ -256,6 +264,15 @@ footer a:hover{color:var(--ink)}
       <p class="note">Entries: point (<code>h</code>, <code>v</code>), <code>zone</code> polygon, <code>sum</code> of point ids, or <code>imax</code>. Limits: <code>min</code>, <code>max</code>, <code>minRatioImax</code>, <code>maxRef {id,k}</code>. Always written for RHT; LHT is mirrored.</p>
     </div>
   </details>
+
+  <fieldset>
+    <p class="lab">Beam model</p>
+    <div class="radios" role="radiogroup" aria-label="Beam model">
+      <label class="rad"><input type="radio" name="model" value="hybrid" checked><span><b>Hybrid</b></span></label>
+      <label class="rad"><input type="radio" name="model" value="sqrt"><span><b>Smooth √ fall-off</b></span></label>
+      <label class="rad"><input type="radio" name="model" value="lobes"><span><b>Lobes</b></span></label>
+    </div>
+  </fieldset>
 
   <button class="go" id="go">Generate beam</button>
   <div class="prog" aria-hidden="true"><i id="progBar"></i></div>
