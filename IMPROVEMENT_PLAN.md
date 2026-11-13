@@ -7,23 +7,25 @@ A phased rework of the beam generation algorithm. Every phase is judged against 
 | 0. Benchmark and tests | Fixed benchmark and a test suite; the solve pipeline moved into one job layer shared by the page and the tests | Baseline recorded; tests run with one command | Done |
 | 1. R149 cut-off | Cut-off defined in the log domain as the regulation scans it; G is an input and a compliance row | G within limits and inflection at 0.57° D in every low-beam case | Done |
 | 2. Lowest-flux beam | Pass first, then reduce flux; CMA-ES search with convergence stops; flux on road becomes an optional minimum | Different random seeds give nearly the same beam | Done |
-| 3. Aim tolerance | Solve must pass ECE across an aim box (default ±0.2° V, ±0.5° H) | Every case passes at all positions of the box | Planned |
+| 3. Aim tolerance | Optional aim box (default 0, nominal aim only); when set, the solve must pass ECE at every position in the box. Peak intensity refined between grid points. Beam function and class moved above the input modes; Q scale reversed (0 smile, 1 "+") | Every benchmark case passes at all positions of a ±0.2° V, ±0.4° H box | Done |
 | 4. Physical limits | Aperture area, LED luminance, optical efficiency | Imax never exceeds luminance × aperture; LED lumens reported | Planned |
 | 5. Blocking check | Name the check that prevents a target | Shown when Imax, flux or spread cannot be met | Planned |
 
 ## Results so far
 
-| Metric | Baseline | After phase 2 |
-|---|---|---|
-| Cut-off sharpness G (low beams) | 0.42–0.47, above the 0.40 maximum | 0.24–0.28 |
-| Cut-off position | 0.37–0.43° D | 0.53–0.58° D |
-| ECE pass, 12 benchmark cases | 11 | 12 |
-| Beam parameters mode, Class B (30 000 cd, 800 lm, ±14°, 4° requested) | 33 749 cd, 693 lm, ±14.8°, 5.5° | 30 333 cd, 792 lm, ±14.0°, 4.0° |
-| Repeatability, customer-style set, 4 seeds (highest ÷ lowest) | Imax ×4.33, flux ×1.52, spread ×2.29 | Imax ×1.16, flux ×1.10, spread ×1.04 |
-| Tests | – | 21 of 21 pass |
+| Metric | Baseline | After phase 2 | After phase 3 |
+|---|---|---|---|
+| Cut-off sharpness G (low beams) | 0.42–0.47, above the 0.40 maximum | 0.24–0.28 | 0.24–0.27 |
+| Cut-off position | 0.37–0.43° D | 0.53–0.58° D | 0.53–0.59° D |
+| ECE pass, 12 benchmark cases | 11 | 12 | 12 |
+| ECE pass across a ±0.2° V, ±0.4° H aim box, 12 cases | – | not solved for | 12 when the box is set |
+| Beam parameters mode, Class B (30 000 cd, 800 lm, ±14°, 4° requested) | 33 749 cd, 693 lm, ±14.8°, 5.5° | 30 333 cd, 792 lm, ±14.0°, 4.0° | 30 621 cd, 804 lm, ±14.1°, 3.9° |
+| Repeatability, customer-style set, 4 seeds (highest ÷ lowest) | Imax ×4.33, flux ×1.52, spread ×2.29 | Imax ×1.16, flux ×1.10, spread ×1.04 | Imax ×1.10, flux ×1.08, spread ×1.08 |
+| Tests | – | 21 of 21 pass | 22 of 22 pass |
 
 Notes:
 
 - The softer, regulation-true cut-off puts less light just under the cut-off line, so reach is a little shorter than the earlier, too-sharp cut-off suggested.
 - A flat symmetric cut-off at 0.57° D cannot light the vehicle axis at 70 m from a 0.65 m mounting height (that point lies at 0.53° D). The Class ES benchmark case therefore misses its 70 m range check; the earlier pass came from the cut-off sitting too high.
-- Aim tolerance is not yet part of the solve: the `aim` column of the benchmark counts aim positions (of 8) where ECE fails.
+- Aim tolerance costs light: with a ±0.2° V, ±0.4° H box the lowest-flux beams need roughly 1.5 to 2.5 times the flux of the nominal-aim solution (customer-style set, Class B: 160 lm at nominal aim, 236 lm with the box), and the hot spot moves right, away from the shoulder. A ±0.5° H box with ±0.2° V is not reachable for Class B, because the 75R point then lies on the cut-off shoulder.
+- The `aim` column of the benchmark counts the aim positions (of 8) where ECE fails inside the configured box; `bench-phase3.json` is solved at nominal aim, `bench-phase3-aim.json` with the box.

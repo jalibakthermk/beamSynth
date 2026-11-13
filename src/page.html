@@ -128,6 +128,8 @@ td.id{font-weight:600}
 .pill.p{background:color-mix(in srgb,var(--pass) 16%,transparent);color:var(--pass)}
 .pill.f{background:color-mix(in srgb,var(--fail) 16%,transparent);color:var(--fail)}
 .pill.i{background:var(--sunk);color:var(--info)}
+.pill.a{background:color-mix(in srgb,var(--fail) 16%,transparent);color:var(--fail)}
+td.aim small{color:var(--muted);font-size:11px;margin-left:4px}
 tr.fail td{background:color-mix(in srgb,var(--fail) 6%,transparent)}
 .export{padding:12px;display:flex;flex-direction:column;gap:10px}
 .export textarea{height:150px}
@@ -164,6 +166,16 @@ footer a:hover{color:var(--ink)}
 
 <div class="bench">
 <aside>
+  <fieldset id="beamPanel">
+    <p class="lab">Beam</p>
+    <div class="row2">
+      <label class="f">Beam function
+        <select id="fn"><option value="low">Low beam</option><option value="high">High beam</option></select>
+      </label>
+      <label class="f">Class (R149)<select id="cls"></select></label>
+    </div>
+  </fieldset>
+
   <div class="seg" role="group" aria-label="Input mode">
     <button id="mRoad" aria-pressed="false">Road requirement</button>
     <button id="mParam" aria-pressed="true">Beam parameters</button>
@@ -171,12 +183,6 @@ footer a:hover{color:var(--ink)}
 
   <fieldset id="paramPanel">
     <p class="lab">Beam parameters</p>
-    <div class="row2">
-      <label class="f">Beam function
-        <select id="fn"><option value="low">Low beam</option><option value="high">High beam</option></select>
-      </label>
-      <label class="f">Class (R149)<select id="cls"></select></label>
-    </div>
     <div class="row2">
       <label class="f">Maximum intensity (cd)<input id="imax" type="number" step="500" value="30000"></label>
       <label class="f">Luminous flux (lm)<input id="flux" type="number" step="10" value="800"></label>
@@ -189,11 +195,11 @@ footer a:hover{color:var(--ink)}
       <label class="f">Hot spot H (°)<input id="hotH" type="number" step="0.05" value="1.15"><small>+ right, − left</small></label>
       <label class="f">Hot spot V (°)<input id="hotV" type="number" step="0.01" value="-0.57"><small>+ up, − down</small></label>
     </div>
-    <label class="f">Q factor <span class="sval" id="smileVal">0.30</span>
-      <input id="smile" type="range" min="0" max="1" step="0.05" value="0.3">
-      <small class="srow"><span>0 · “+” shape</span><span>1 · strong smile</span></small>
+    <label class="f">Q factor <span class="sval" id="smileVal">0.70</span>
+      <input id="smile" type="range" min="0" max="1" step="0.05" value="0.7">
+      <small class="srow"><span>0 · strong smile</span><span>1 · “+” shape</span></small>
     </label>
-    <p class="note">Q bends the bottom of the beam upward toward the sides, so the isolines curve like a smile instead of crossing as a “+”. It does not move the hot spot or change the H spread. Default hot spot: 75R (75L in LHT) for Class B, 0.86D on V-V for symmetric classes, H-V for the high beam.</p>
+    <p class="note">A low Q bends the bottom of the beam upward toward the sides, so the isolines curve like a smile; at Q = 1 a wide beam crosses as a “+”. Q does not move the hot spot or change the H spread. Default hot spot: 75R (75L in LHT) for Class B, 0.86D on V-V for symmetric classes, H-V for the high beam.</p>
   </fieldset>
 
   <fieldset id="roadPanel" hidden>
@@ -221,6 +227,15 @@ footer a:hover{color:var(--ink)}
       <label class="f">Lamp spacing (m)<input id="sp" type="number" step="0.05" value="1.4"></label>
       <label class="f">Evaluation height (m)<input id="evalH" type="number" step="0.05" min="0" value="0"></label>
     </div>
+  </fieldset>
+
+  <fieldset>
+    <p class="lab">Aim tolerance</p>
+    <div class="row2">
+      <label class="f">Vertical (±°)<input id="aimV" type="number" step="0.05" min="0" max="1" value="0"></label>
+      <label class="f">Horizontal (±°)<input id="aimH" type="number" step="0.05" min="0" max="2" value="0"></label>
+    </div>
+    <p class="note">At 0 the beam is solved for nominal aim only. Set a tolerance and the beam must pass ECE with the lamp mis-aimed anywhere in that box. A Class B beam can pass up to ±0.4° H with ±0.2° V; beyond that the cut-off shoulder reaches the 75R point.</p>
   </fieldset>
 
   <fieldset>

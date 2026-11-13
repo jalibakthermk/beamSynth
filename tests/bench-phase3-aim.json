@@ -1,0 +1,286 @@
+{
+ "param low B": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 31885,
+  "flux": 784,
+  "roadFlux": 702,
+  "spreadH": 14,
+  "spreadV": 4.2,
+  "hot": [
+   1.4,
+   -0.65
+  ],
+  "loops": 2,
+  "G": 0.236,
+  "cutPos": -0.53,
+  "aim": {
+   "h": 0.4,
+   "v": 0.2
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 8.6
+ },
+ "param low CS": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 18427,
+  "flux": 382,
+  "roadFlux": 355,
+  "spreadH": 16,
+  "spreadV": 4,
+  "hot": [
+   0,
+   -0.9
+  ],
+  "loops": 1,
+  "G": 0.246,
+  "cutPos": -0.57,
+  "aim": {
+   "h": 0.4,
+   "v": 0.2
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 4.8
+ },
+ "param low DS": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 20839,
+  "flux": 699,
+  "roadFlux": 663,
+  "spreadH": 17,
+  "spreadV": 4.5,
+  "hot": [
+   0,
+   -0.93
+  ],
+  "loops": 2,
+  "G": 0.241,
+  "cutPos": -0.58,
+  "aim": {
+   "h": 0.4,
+   "v": 0.2
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 5.5
+ },
+ "param low ES": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 21836,
+  "flux": 636,
+  "roadFlux": 596,
+  "spreadH": 16.9,
+  "spreadV": 4.7,
+  "hot": [
+   0,
+   -0.9
+  ],
+  "loops": 2,
+  "G": 0.244,
+  "cutPos": -0.57,
+  "aim": {
+   "h": 0.4,
+   "v": 0.2
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 6.4
+ },
+ "param high B": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 91889,
+  "flux": 1179,
+  "roadFlux": 376,
+  "spreadH": 12.2,
+  "spreadV": 6.9,
+  "hot": [
+   0.05,
+   -0.03
+  ],
+  "loops": 4,
+  "aim": {
+   "h": 0.4,
+   "v": 0.2
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 3.7
+ },
+ "param high BS": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 60013,
+  "flux": 798,
+  "roadFlux": 406,
+  "spreadH": 12,
+  "spreadV": 6,
+  "hot": [
+   0,
+   0
+  ],
+  "loops": 1,
+  "aim": {
+   "h": 0.4,
+   "v": 0.2
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 2.4
+ },
+ "param high DSES": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 59966,
+  "flux": 800,
+  "roadFlux": 338,
+  "spreadH": 12,
+  "spreadV": 6,
+  "hot": [
+   0,
+   0
+  ],
+  "loops": 1,
+  "aim": {
+   "h": 0.4,
+   "v": 0.2
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 2.8
+ },
+ "param low B LHT": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 31885,
+  "flux": 784,
+  "roadFlux": 702,
+  "spreadH": 14,
+  "spreadV": 4.2,
+  "hot": [
+   1.4,
+   -0.65
+  ],
+  "loops": 2,
+  "G": 0.236,
+  "cutPos": -0.53,
+  "aim": {
+   "h": 0.4,
+   "v": 0.2
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 7.8
+ },
+ "road example low B": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 58483,
+  "flux": 316,
+  "roadFlux": 260,
+  "spreadH": 10.5,
+  "spreadV": 4.5,
+  "hot": [
+   1.9,
+   -0.6
+  ],
+  "loops": 6,
+  "G": 0.265,
+  "cutPos": -0.51,
+  "aim": {
+   "h": 0.4,
+   "v": 0.2
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 18.2
+ },
+ "road example high": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 68984,
+  "flux": 606,
+  "roadFlux": 168,
+  "spreadH": 9.5,
+  "spreadV": 7.9,
+  "hot": [
+   -0.05,
+   -0.17
+  ],
+  "loops": 4,
+  "aim": {
+   "h": 0.4,
+   "v": 0.2
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 6.7
+ },
+ "road customer B": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 47279,
+  "flux": 236,
+  "roadFlux": 157,
+  "spreadH": 12.9,
+  "spreadV": 2.9,
+  "hot": [
+   2.3,
+   -0.5
+  ],
+  "loops": 3,
+  "G": 0.24,
+  "cutPos": -0.54,
+  "aim": {
+   "h": 0.4,
+   "v": 0.2
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 14.4
+ },
+ "road customer ES": {
+  "ece": [],
+  "roadMiss": [
+   "Range at 3 lx, minimum 70 m",
+   "45-60 m at 9 m RH side",
+   "Average 6 m LH and RH, beyond 60 m"
+  ],
+  "imax": 30982,
+  "flux": 275,
+  "roadFlux": 233,
+  "spreadH": 15.4,
+  "spreadV": 3.9,
+  "hot": [
+   0,
+   -1.07
+  ],
+  "loops": 4,
+  "G": 0.251,
+  "cutPos": -0.57,
+  "aim": {
+   "h": 0.4,
+   "v": 0.2
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 11.4
+ },
+ "seeds road example low B": {
+  "imaxRatio": 1.66,
+  "fluxRatio": 1.72,
+  "spreadRatio": 1.25,
+  "allOk": true
+ },
+ "seeds road customer B": {
+  "imaxRatio": 1.06,
+  "fluxRatio": 1.14,
+  "spreadRatio": 1.06,
+  "allOk": true
+ }
+}

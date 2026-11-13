@@ -43,7 +43,8 @@ function measure(cfg, out) {
     imax: Math.round(r.imax), flux: Math.round(r.flux), roadFlux: Math.round(r.roadFlux), spreadH: +r.sp.spreadH.toFixed(1), spreadV: +r.sp.spreadV.toFixed(1),
     hot: [+r.hMax.toFixed(2), +r.vMax.toFixed(2)], loops: out.loops };
   if (low) { const s = C.cutoffScan(out.P, cfg.sym ? 2.5 : -2.5); m.G = +s.G.toFixed(3); m.cutPos = +s.pos.toFixed(2); }
-  const box = aimBox(out.P, cfg.table, 0.5, 0.2); m.aimFails = Object.keys(box).length; m.aimDetail = box;
+  // aim positions (of 8, plus nominal) at which ECE fails inside the configured aim box, checked independently of the solver
+  const aim = cfg.aim || { h: 0, v: 0 }, box = aimBox(out.P, cfg.table, aim.h, aim.v); m.aim = aim; m.aimFails = Object.keys(box).length; m.aimDetail = box;
   return m;
 }
 module.exports = { C, eceFailsShifted, aimBox, measure };

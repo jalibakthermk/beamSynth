@@ -195,7 +195,7 @@ function cutoffV(cut, h) { return h > 0 ? Math.min(cut.elbow + h * Math.tan(cut.
 // inflection sits on the cut-off line and whose steepest slope is G = log10(s / F) * tanh(0.025 / cut.sharp).
 // cut.off (deg) is a small calibration offset so the measured inflection lands exactly on the nominal line.
 function maskAt(P, h, v) { if (P.beam !== "low") return 1; return 1 / (1 + Math.exp((v - cutoffV(P.cut, h) - (P.cut.off || 0)) / P.cut.sharp)); }
-const PREF = { flux: 2, imax: 0.3 };
+const PREF = { flux: 2, passFlux: +(typeof process !== "undefined" && process.env.BS_PF || 0.4), imax: 0.3 };
 const STRAY = 0.003;      // light above the cut-off never drops below 0.3 % of the beam it is cut from
 function cutBlend(s, m, floor) {
   if (m >= 0.99999) return s;
@@ -350,20 +350,20 @@ function pointInPoly(x, y, poly) {
   return inside;
 }
 
-function compileTable(table, beam, cut) {
-  const P0 = { beam, cut };
+function compileTable(table, beam, cut, step) {
+  const P0 = { beam, cut }; step = step || 0.25;
   return table.map(e => {
     const c = Object.assign({}, e);
     if (e.zone) {
       const xs = e.zone.map(p => p[0]), ys = e.zone.map(p => p[1]);
       const pts = [];
-      for (let h = Math.min(...xs); h <= Math.max(...xs) + 1e-9; h += 0.25)
-        for (let v = Math.min(...ys); v <= Math.max(...ys) + 1e-9; v += 0.25)
+      for (let h = Math.min(...xs); h <= Math.max(...xs) + 1e-9; h += step)
+        for (let v = Math.min(...ys); v <= Math.max(...ys) + 1e-9; v += step)
           if (pointInPoly(h, v, e.zone) || e.zone.some(p => Math.abs(p[0] - h) < 1e-6 && Math.abs(p[1] - v) < 1e-6)) pts.push([h, v, maskAt(P0, h, v)]);
       e.zone.forEach(p => pts.push([p[0], p[1], maskAt(P0, p[0], p[1])]));
       c.samples = pts;
     } else if (e.line) {
-      const [[h1, v1], [h2, v2]] = e.line, n = Math.max(1, Math.ceil(Math.hypot(h2 - h1, v2 - v1) / 0.25));
+      const [[h1, v1], [h2, v2]] = e.line, n = Math.max(1, Math.ceil(Math.hypot(h2 - h1, v2 - v1) / step));
       c.samples = [];
       for (let k = 0; k <= n; k++) { const h = h1 + (h2 - h1) * k / n, v = v1 + (v2 - v1) * k / n; c.samples.push([h, v, maskAt(P0, h, v)]); }
       c.zone = null; c.isLine = true;
@@ -548,19 +548,25 @@ function penalty(val, min, max, margin) {
   return p;
 }
 
-function evaluate(P, ctx, detail) {
-  const r = evalGrid(P, ctx.core);
-  const fr = evalGrid(P, ctx.fluxGrid);
-  const imax = Math.max(r.imax, fr.imax), flux = fr.flux;
-  const sp = spreads(ctx.core, r, 0.05);
-  const margin = detail ? 0 : 0.04;
+// the same table entries with the whole beam (cut-off included) moved by (dh, dv): each test point is read at (h - dh, v - dv)
+function shiftTable(table, dh, dv) {
+  return table.map(e => {
+    const c = Object.assign({}, e);
+    if (e.zone) c.zone = e.zone.map(p => [p[0] - dh, p[1] - dv]);
+    if (e.line) c.line = e.line.map(p => [p[0] - dh, p[1] - dv]);
+    if (e.h != null) { c.h = e.h - dh; c.v = e.v - dv; }
+    return c;
+  });
+}
+const AIM_CORNERS = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+function tableEval(P, table, imax, margin, detail) {
   let cost = 0;
   const vals = {}, rows = [];
-  for (const e of ctx.table) {
+  for (const e of table) {
     if (e.h != null && !e.zone && !e.isLine) vals[e.id] = evalM(P, e.h, e.v, e.m);
     else if (e.imax) vals[e.id] = imax;
   }
-  for (const e of ctx.table) {
+  for (const e of table) {
     let val, min = e.min, max = e.max, kind = "pt";
     if (e.zone || e.isLine) {
       kind = e.isLine ? "line" : "zone";
@@ -577,6 +583,53 @@ function evaluate(P, ctx, detail) {
     if (e.info) { if (detail) rows.push(row(e, kind, val, null, null)); continue; }
     cost += penalty(val, min, max, margin);
     if (detail) rows.push(row(e, kind, val, min, max));
+  }
+  return { cost, rows };
+}
+// worst margin of every ECE row over the aim box (nominal, 4 corners, 4 edge centres)
+function aimAnalysis(P, table, beam, cut, aim, imax, rows) {
+  const key = x => x.id + (x.min != null && x.max == null ? "|min" : x.max != null && x.min == null ? "|max" : "");
+  const worst = {};
+  for (const sh of [-1, 0, 1]) for (const sv of [-1, 0, 1]) {
+    if (!sh && !sv) continue;
+    const tr = tableEval(P, compileTable(shiftTable(table, sh * aim.h, sv * aim.v), beam, cut), imax, 0, true).rows;
+    for (const x of tr) if (x.margin != null) { const k = key(x); if (worst[k] == null || x.margin < worst[k].margin) worst[k] = { margin: x.margin, val: x.val, at: [sh * aim.h, sv * aim.v] }; }
+  }
+  let fails = 0;
+  for (const x of rows) { const w = worst[key(x)]; if (w && x.margin != null) { x.aimMargin = Math.min(w.margin, x.margin); x.aimVal = w.margin < x.margin ? w.val : x.val; x.aimAt = w.margin < x.margin ? w.at : [0, 0]; x.aimPass = x.aimMargin >= 0; if (!x.aimPass && x.pass !== false) fails++; } }
+  return fails;
+}
+
+function evaluate(P, ctx, detail) {
+  const r = evalGrid(P, ctx.core);
+  const fr = evalGrid(P, ctx.fluxGrid);
+  // the grid peak underestimates Imax between grid points: refine it around the grid maximum
+  // (a quick 2-level search while solving, a fine one for the final result)
+  let pk = Math.max(r.imax, fr.imax), pkH = r.hMax, pkV = r.vMax;
+  if (detail) {
+    for (let dh = -0.5; dh <= 0.501; dh += 0.05) for (let dv = -0.2; dv <= 0.201; dv += 0.025) { const x = evalI(P, r.hMax + dh, r.vMax + dv); if (x > pk) { pk = x; pkH = r.hMax + dh; pkV = r.vMax + dv; } }
+  } else {
+    for (const st of [[0.25, 0.1], [0.12, 0.05]]) {
+      const h0 = pkH, v0 = pkV;
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { if (!a && !b) continue; const x = evalI(P, h0 + a * st[0], v0 + b * st[1]); if (x > pk) { pk = x; pkH = h0 + a * st[0]; pkV = v0 + b * st[1]; } }
+    }
+  }
+  r.hMax = pkH; r.vMax = pkV;
+  const imax = pk, flux = fr.flux;
+  const sp = spreads(ctx.core, r, 0.05);
+  const margin = detail ? 0 : 0.04, W = ctx.eceWeight || 1;
+  let cost = 0;
+  const te = tableEval(P, ctx.table, imax, margin, detail), rows = te.rows;
+  cost += W * te.cost;
+  // aim tolerance: the ECE table must also hold with the beam shifted to each corner of the aim box
+  let aimFails = null;
+  if (ctx.aimTables) {
+    aimFails = [];
+    for (const tb of ctx.aimTables) {
+      const ta = tableEval(P, tb, imax, detail ? 0 : 0.015, detail);
+      cost += W * ta.cost;
+      if (detail) for (const x of ta.rows) if (x.pass === false && !aimFails.includes(x.id)) aimFails.push(x.id);
+    }
   }
   const roadRows = [];
   for (const c of ctx.road) {
@@ -602,15 +655,10 @@ function evaluate(P, ctx, detail) {
   if (rfv != null && ctx.rf.target && !ctx.rfRelax) cost += penalty(rfv, ctx.rf.target, null, margin);
   // preference among passing beams: the lowest emitted flux, then (always, weakly) the lowest peak intensity
   if (ctx.prefer === "flux") cost += PREF.flux * flux / 1000;
+  else if (ctx.rfMin) cost += PREF.passFlux * flux / 1000;   // pass-finding step of a lowest-flux solve: lean toward low flux, weakly
   if (!t.imax) cost += PREF.imax * imax / 100000;
   if (!detail) return cost;
-  // refine the reported hot-spot position below the grid step
-  let hMax = r.hMax, vMax = r.vMax, best = -1;
-  for (let dh = -0.4; dh <= 0.401; dh += 0.05) for (let dv = -0.15; dv <= 0.151; dv += 0.025) {
-    const x = evalI(P, r.hMax + dh, r.vMax + dv); if (x > best) { best = x; hMax = r.hMax + dh; vMax = r.vMax + dv; }
-  }
-  r.hMax = hMax; r.vMax = vMax;
-  return { cost, imax, flux, roadFlux: rfv, roadFluxTarget: ctx.rf ? ctx.rf.target : null, hMax: r.hMax, vMax: r.vMax, sp, rows, roadRows, pass: rows.every(x => x.pass !== false), roadPass: roadRows.every(x => x.pass !== false) };
+  return { cost, imax, flux, aimFails, roadFlux: rfv, roadFluxTarget: ctx.rf ? ctx.rf.target : null, hMax: r.hMax, vMax: r.vMax, sp, rows, roadRows, pass: rows.every(x => x.pass !== false), roadPass: roadRows.every(x => x.pass !== false) };
 }
 
 function row(e, kind, val, min, max) {
@@ -629,6 +677,7 @@ function buildContext(o) {
     core: makeGrid(beam, cut, -70, 70, 0.5, vRange[0], vRange[1], 0.2),
     fluxGrid: makeGrid(beam, cut, -90, 90, 1, beam === "low" ? [[-60, -12, 1], [-12, 6, 0.25], [6, 40, 1]] : [[-60, -12, 1], [-12, 12, 0.25], [12, 40, 1]]),
     table: compileTable(o.table, beam, cut),
+    aimTables: o.aim && (o.aim.h > 0 || o.aim.v > 0) ? AIM_CORNERS.map(([sh, sv]) => compileTable(shiftTable(o.table, sh * o.aim.h, sv * o.aim.v), beam, cut, 0.5)) : null,
     road: compileRoad(o.road, beam, cut),
     rf: null,
     useRoad: o.useRoad, targets: o.targets, shape: o.shape || null
@@ -955,7 +1004,8 @@ function makeLoopSolverS(ctx, u0, opt) {
   let inner = makeCMA(cost, u0, o.first, 0.15, seed0, { stall: 350, minIt: 700 }), base = 0;
   const score = u => {
     const r = evaluate(D(u, beam, ctx.cut, ctx.shape), Object.assign({}, ctx, { useRoad: true }), true);
-    const ece = r.rows.filter(x => x.pass === false).length, fails = r.roadRows.map((x, i) => x.pass === false ? i : -1).filter(i => i >= 0);
+    const nomFail = r.rows.filter(x => x.pass === false).map(x => x.id);
+    const ece = nomFail.length + (r.aimFails ? r.aimFails.filter(id => !nomFail.includes(id)).length : 0), fails = r.roadRows.map((x, i) => x.pass === false ? i : -1).filter(i => i >= 0);
     let short = 0; r.roadRows.forEach(x => { if (x.pass === false) short += Math.abs(x.margin); });
     return { u, ece, fails, miss: fails.length, short, margins: r.roadRows.map(x => x.margin), cost: inner.fbest, flux: r.flux, rf: r.roadFlux };
   };
@@ -966,7 +1016,10 @@ function makeLoopSolverS(ctx, u0, opt) {
     if (!doneInner) return false;
     const c = score(inner.best); st.cands.push(c);
     // loops 1 and 2 aim for every check; one missed check is accepted only from loop 3 on
-    const good = c.ece === 0 && (!ctx.useRoad || c.miss <= (st.loop >= 3 ? o.allow : 0));
+    // beam parameters mode: another round while the targets are far off and the last round still gained over 5 %
+    const prevC = st.cands.length > 1 ? st.cands[st.cands.length - 2].cost : null;
+    const settled = c.cost < 1 || (prevC != null && c.cost > prevC * 0.95);
+    const good = c.ece === 0 && (ctx.useRoad ? c.miss <= (st.loop >= 3 ? o.allow : 0) : settled);
     if (good && wantFlux && st.refine < o.refine) {
       // flux descent: restart the search around the passing beam with flux in the cost, until a round gains under 1 %
       const bestNow = st.pick(), gain = st.refFlux == null ? 1 : (st.refFlux - bestNow.flux) / st.refFlux;
@@ -998,7 +1051,7 @@ function makeLoopSolverS(ctx, u0, opt) {
     return false;
   };
   // fewest ECE fails, then fewest road misses, then (lowest-flux mode) the lowest flux, else the smallest shortfall
-  st.pick = () => st.cands.slice().sort((a, b) => a.ece - b.ece || a.miss - b.miss || (ctx.prefer === "flux" ? a.flux - b.flux : 0) || a.short - b.short)[0];
+  st.pick = () => st.cands.slice().sort((a, b) => a.ece - b.ece || a.miss - b.miss || (ctx.prefer === "flux" ? a.flux - b.flux : 0) || a.short - b.short || (ctx.useRoad ? 0 : a.cost - b.cost))[0];
   st.pickCost = () => st.pick();
   st.finish = () => {
     st.done = true; st.used = base + inner.it; st.it = st.iters;
@@ -1014,7 +1067,9 @@ function makeLoopSolverS(ctx, u0, opt) {
 // -------------------------------------------------------------------------------------
 const PARAM_DEFAULTS = { low: { imax: 30000, flux: 800, sph: 14, spv: 4 }, low_sym: { imax: 18000, flux: 700, sph: 16, spv: 4 }, low_CS: { imax: 18000, flux: 400, sph: 16, spv: 4 },
   high: { imax: 90000, flux: 1200, sph: 12, spv: 6 }, high_sym: { imax: 60000, flux: 800, sph: 12, spv: 6 } };
-const Q_DEFAULT = 0.3, G_DEFAULT = 0.25;
+// aim tolerance box, +/- degrees. 0.4 H with 0.2 V is the largest box a Class B beam can pass: at 0.5 H and 0.2 V the
+// shoulder of the cut-off lands on the 75R point.
+const Q_DEFAULT = 0.3, G_DEFAULT = 0.25, AIM_DEFAULT = { h: 0, v: 0 };
 // R149 cut-off sharpness limits: asymmetric 0.13 to 0.40 (Annex 5); symmetric at least 0.13 (BS) or 0.08 (AS, CS, DS, ES), no maximum (Annex 6)
 function gLimits(cut, cls) { return cut && cut.sym ? { min: cls === "BS" ? 0.13 : 0.08, max: null } : { min: 0.13, max: 0.40 }; }
 const TABLE_KEYS = { low: { B: "low", CS: "low_CS", DS: "low_DS", ES: "low_ES" }, high: { B: "high", BS: "high_BS", CS: "high_CS", DSES: "high_DSES" } };
@@ -1039,12 +1094,13 @@ function defaultConfig(o) {
   return { beam, cls, key: tableKeyFor(beam, cls), sym: !!cut.sym, cut, table: PRESET_TABLES[tableKeyFor(beam, cls)].points, lht, H, sp,
     checks: normalizeChecks(o.checks || (mode === "param" && beam === "low" && cls === "B" ? PRESET_ROAD.low.checks : [])), evalH: 0, plane: "vertical", targets,
     roadFlux: { zone: Object.assign({}, ROAD_FLUX_ZONE), target: rft, lamps: "one", height: H, spacing: sp, traffic: lht ? "LHT" : "RHT" },
-    shape: mode === "param" ? { smile: o.smile != null ? o.smile : Q_DEFAULT, hot: targets.hot } : null, lane: 3.5, mode, model: o.model || "hybrid" };
+    shape: mode === "param" ? { smile: o.smile != null ? o.smile : Q_DEFAULT, hot: targets.hot } : null, lane: 3.5, mode, model: o.model || "hybrid",
+    aim: o.aim !== undefined ? o.aim : Object.assign({}, AIM_DEFAULT) };
 }
 function contextFor(c) {
   return buildContext({ beam: c.beam, cut: c.cut, table: c.table,
     road: { checks: c.checks, height: c.H, spacing: c.sp, plane: c.plane || "vertical", traffic: c.lht ? "LHT" : "RHT", evalH: c.evalH },
-    useRoad: c.mode === "road", targets: c.targets, roadFlux: c.roadFlux, shape: c.shape });
+    useRoad: c.mode === "road", targets: c.targets, roadFlux: c.roadFlux, shape: c.shape, aim: c.aim });
 }
 // R149 Annex 5 cut-off scan at horizontal angle h: G = log10 I(b) - log10 I(b + 0.1 deg).
 // Returns the largest G and the cut-off position (inflection of log I, i.e. the steepest point).
@@ -1083,7 +1139,8 @@ function createJob(c) {
     const P = dec(best, c.beam, cut, c.shape), r = evaluate(P, Object.assign({}, ctx, { useRoad: true, cutCal: null }), true);
     const sc = low ? cutoffScan(P, scanH) : null, lim = gLimits(cut, c.cls);
     const gBad = sc && (sc.G < lim.min || (lim.max != null && sc.G > lim.max)) ? 1 : 0;
-    const cd = { u: best, cut, ctx, sc, ece: r.rows.filter(x => x.pass === false).length + gBad, miss: c.mode === "road" ? r.roadRows.filter(x => x.pass === false).length : 0,
+    const nomFail = r.rows.filter(x => x.pass === false).map(x => x.id);
+    const cd = { u: best, cut, ctx, sc, ece: nomFail.length + (r.aimFails ? r.aimFails.filter(id => !nomFail.includes(id)).length : 0) + gBad, miss: c.mode === "road" ? r.roadRows.filter(x => x.pass === false).length : 0,
       err: sc ? Math.abs(sc.G - gTarget) / 0.03 + Math.abs(sc.pos - cut.elbow) / 0.05 : 0 };
     cands.push(cd); return cd;
   };
@@ -1126,6 +1183,9 @@ function createJob(c) {
   job.result = () => {
     const P = dec(best, c.beam, cut, c.shape);
     const res = evaluate(P, Object.assign({}, ctx, { useRoad: true, cutCal: null }), true);
+    res.aim = c.aim && (c.aim.h > 0 || c.aim.v > 0) ? c.aim : null;
+    res.aimFailCount = res.aim ? aimAnalysis(P, c.table, c.beam, cut, c.aim, res.imax, res.rows) : 0;
+    res.aimPass = res.aimFailCount === 0;
     if (low) {   // cut-off rows, measured as in R149 Annex 5 / 6
       const sc = cutoffScan(P, scanH), lim = gLimits(cut, c.cls), side = cut.sym ? "2.5°" : c.lht ? "2.5R" : "2.5L";
       const gPass = sc.G >= lim.min && (lim.max == null || sc.G <= lim.max);
@@ -1139,4 +1199,4 @@ function createJob(c) {
 }
 function solveSync(c) { const job = createJob(c); while (!job.run(200)); return job.result(); }
 
-if (typeof module !== "undefined") module.exports = { cutoffScan, cutBlend, widthForG, gLimits, G_DEFAULT, PARAM_DEFAULTS, Q_DEFAULT, tableKeyFor, paramDefaults, hotDefault, defaultCut, defaultConfig, contextFor, createJob, solveSync, makeGrid, evalGrid, makeSolverS, makeCMA, decodeY, initHybrid, kneePenalty, makeLoopSolverS, decodeS, initSqrt, makeSolverS, sqrtRel, SMILE, applySmile, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };
+if (typeof module !== "undefined") module.exports = { AIM_DEFAULT, shiftTable, tableEval, aimAnalysis, cutoffScan, cutBlend, widthForG, gLimits, G_DEFAULT, PARAM_DEFAULTS, Q_DEFAULT, tableKeyFor, paramDefaults, hotDefault, defaultCut, defaultConfig, contextFor, createJob, solveSync, makeGrid, evalGrid, makeSolverS, makeCMA, decodeY, initHybrid, kneePenalty, makeLoopSolverS, decodeS, initSqrt, makeSolverS, sqrtRel, SMILE, applySmile, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };

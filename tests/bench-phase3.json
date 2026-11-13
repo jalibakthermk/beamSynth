@@ -1,0 +1,285 @@
+{
+ "param low B": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 30621,
+  "flux": 804,
+  "roadFlux": 749,
+  "spreadH": 14.1,
+  "spreadV": 3.9,
+  "hot": [
+   1.05,
+   -0.6
+  ],
+  "loops": 1,
+  "G": 0.24,
+  "cutPos": -0.57,
+  "aim": {
+   "h": 0,
+   "v": 0
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 5
+ },
+ "param low CS": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 18125,
+  "flux": 405,
+  "roadFlux": 384,
+  "spreadH": 16,
+  "spreadV": 3.9,
+  "hot": [
+   0,
+   -0.93
+  ],
+  "loops": 1,
+  "G": 0.244,
+  "cutPos": -0.58,
+  "aim": {
+   "h": 0,
+   "v": 0
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 3.4
+ },
+ "param low DS": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 19815,
+  "flux": 706,
+  "roadFlux": 659,
+  "spreadH": 16.8,
+  "spreadV": 4.5,
+  "hot": [
+   0,
+   -0.9
+  ],
+  "loops": 1,
+  "G": 0.243,
+  "cutPos": -0.58,
+  "aim": {
+   "h": 0,
+   "v": 0
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 3.4
+ },
+ "param low ES": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 19949,
+  "flux": 685,
+  "roadFlux": 646,
+  "spreadH": 16.9,
+  "spreadV": 4.3,
+  "hot": [
+   0,
+   -0.93
+  ],
+  "loops": 1,
+  "G": 0.241,
+  "cutPos": -0.59,
+  "aim": {
+   "h": 0,
+   "v": 0
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 3.5
+ },
+ "param high B": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 90172,
+  "flux": 1207,
+  "roadFlux": 539,
+  "spreadH": 12,
+  "spreadV": 6,
+  "hot": [
+   0,
+   0
+  ],
+  "loops": 1,
+  "aim": {
+   "h": 0,
+   "v": 0
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 2.3
+ },
+ "param high BS": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 59972,
+  "flux": 801,
+  "roadFlux": 417,
+  "spreadH": 12,
+  "spreadV": 6,
+  "hot": [
+   0,
+   0
+  ],
+  "loops": 1,
+  "aim": {
+   "h": 0,
+   "v": 0
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 1.8
+ },
+ "param high DSES": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 61344,
+  "flux": 808,
+  "roadFlux": 208,
+  "spreadH": 12.1,
+  "spreadV": 6.2,
+  "hot": [
+   0,
+   -0.03
+  ],
+  "loops": 1,
+  "aim": {
+   "h": 0,
+   "v": 0
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 1.4
+ },
+ "param low B LHT": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 30621,
+  "flux": 804,
+  "roadFlux": 749,
+  "spreadH": 14.1,
+  "spreadV": 3.9,
+  "hot": [
+   1.05,
+   -0.6
+  ],
+  "loops": 1,
+  "G": 0.24,
+  "cutPos": -0.57,
+  "aim": {
+   "h": 0,
+   "v": 0
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 4.9
+ },
+ "road example low B": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 36584,
+  "flux": 135,
+  "roadFlux": 83,
+  "spreadH": 17.8,
+  "spreadV": 2,
+  "hot": [
+   1.6,
+   -0.57
+  ],
+  "loops": 4,
+  "G": 0.266,
+  "cutPos": -0.53,
+  "aim": {
+   "h": 0,
+   "v": 0
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 14.6
+ },
+ "road example high": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 114262,
+  "flux": 221,
+  "roadFlux": 106,
+  "spreadH": 8.3,
+  "spreadV": 2.5,
+  "hot": [
+   0.2,
+   -0.03
+  ],
+  "loops": 4,
+  "aim": {
+   "h": 0,
+   "v": 0
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 8.7
+ },
+ "road customer B": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 29058,
+  "flux": 160,
+  "roadFlux": 110,
+  "spreadH": 15.8,
+  "spreadV": 2.6,
+  "hot": [
+   1.5,
+   -0.62
+  ],
+  "loops": 4,
+  "G": 0.253,
+  "cutPos": -0.57,
+  "aim": {
+   "h": 0,
+   "v": 0
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 13.7
+ },
+ "road customer ES": {
+  "ece": [],
+  "roadMiss": [
+   "Range at 3 lx, minimum 70 m",
+   "45-60 m at 9 m RH side"
+  ],
+  "imax": 41554,
+  "flux": 310,
+  "roadFlux": 266,
+  "spreadH": 12.2,
+  "spreadV": 3.2,
+  "hot": [
+   0,
+   -1.15
+  ],
+  "loops": 4,
+  "G": 0.251,
+  "cutPos": -0.56,
+  "aim": {
+   "h": 0,
+   "v": 0
+  },
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 9
+ },
+ "seeds road example low B": {
+  "imaxRatio": 1.1,
+  "fluxRatio": 1.16,
+  "spreadRatio": 1.21,
+  "allOk": true
+ },
+ "seeds road customer B": {
+  "imaxRatio": 1.1,
+  "fluxRatio": 1.08,
+  "spreadRatio": 1.08,
+  "allOk": true
+ }
+}

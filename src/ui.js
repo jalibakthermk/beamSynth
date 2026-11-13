@@ -68,7 +68,7 @@ function loadJsonFile(file) {
     let data;
     try { data = JSON.parse(text); }
     catch (e) { name.textContent = `${file.name} is not valid JSON: ${e.message}`; name.className = "drop-s err"; return; }
-    $("roadJson").value = compactJSON(data); setMode("road");
+    $("roadJson").value = compactJSON(data); syncFromJson(); setMode("road");
     name.textContent = `Loaded ${file.name}. Press Generate beam.`; name.className = "drop-s";
   };
   rd.onerror = () => { name.textContent = `Could not read ${file.name}.`; name.className = "drop-s err"; };
@@ -79,9 +79,21 @@ $("jsonFile").addEventListener("change", e => { loadJsonFile(e.target.files[0]);
 ["dragleave", "drop"].forEach(t => $("drop").addEventListener(t, e => { e.preventDefault(); $("drop").classList.remove("over"); }));
 $("drop").addEventListener("drop", e => loadJsonFile(e.dataTransfer && e.dataTransfer.files[0]));
 
-$("exLow").onclick = () => { $("roadJson").value = compactJSON(PRESET_ROAD.low); };
-$("exHigh").onclick = () => { $("roadJson").value = compactJSON(PRESET_ROAD.high); };
+$("exLow").onclick = () => { $("roadJson").value = compactJSON(PRESET_ROAD.low); syncFromJson(); };
+$("exHigh").onclick = () => { $("roadJson").value = compactJSON(PRESET_ROAD.high); syncFromJson(); };
 
+// Q as shown on the page: 0 = strong smile, 1 = "+" shape (the model's smile factor is 1 - Q)
+function qOut() { return S.cfg && S.cfg.shape ? Math.round((1 - S.cfg.shape.smile) * 100) / 100 : 1; }
+// Beam function and class are common to both input modes. A requirement set that names them sets the selectors when it is loaded or edited.
+function syncFromJson() {
+  let road; try { road = JSON.parse($("roadJson").value); } catch (e) { return; }
+  if (!road || Array.isArray(road)) return;
+  const fn = road.function === "low" || road.function === "high" ? road.function : S.beam;
+  const cls = road.class && CLASSES[fn].some(c => c[0] === road.class) ? road.class : null;
+  if (fn === S.beam && (!cls || cls === $("cls").value)) return;
+  $("fn").value = fn; S.beam = fn; fillClasses(cls || undefined); setDefaults(); syncCut(); showTable();
+}
+$("roadJson").addEventListener("change", syncFromJson);
 function setMode(m) {
   S.mode = m; $("mRoad").setAttribute("aria-pressed", m === "road"); $("mParam").setAttribute("aria-pressed", m === "param");
   $("roadPanel").hidden = m !== "road"; $("paramPanel").hidden = m !== "param";
@@ -96,8 +108,6 @@ function gather() {
   let road = null;
   try { road = JSON.parse($("roadJson").value); } catch (e) { if (S.mode === "road") throw new Error("Road JSON: " + e.message); }
   if (S.mode === "road" && road) {
-    if (road.function === "low" || road.function === "high") { $("fn").value = road.function; S.beam = road.function; fillClasses(road.class); syncCut(); showTable(); setRoadFluxDefault(); }
-    else if (road.class) { fillClasses(road.class); syncCut(); showTable(); setRoadFluxDefault(); }
     const rf = road.roadFlux;
     if (rf && typeof rf === "object") {
       if (rf.target_lm !== undefined) $("rfT").value = rf.target_lm == null ? "" : rf.target_lm;
@@ -109,6 +119,8 @@ function gather() {
     if (road.mounting) { if (road.mounting.height_m) $("mh").value = road.mounting.height_m; if (road.mounting.spacing_m) $("sp").value = road.mounting.spacing_m; }
     if (road.plane === "vertical" || road.plane === "horizontal") $("plane").value = road.plane;
     if (road.evalHeight_m != null && isFinite(road.evalHeight_m)) $("evalH").value = road.evalHeight_m;
+    const at = road.aimTolerance;
+    if (at && typeof at === "object") { if (isFinite(at.v_deg)) $("aimV").value = Math.abs(at.v_deg); if (isFinite(at.h_deg)) $("aimH").value = Math.abs(at.h_deg); }
   }
   S.beam = $("fn").value;
   let table;
@@ -140,12 +152,13 @@ function gather() {
   }
   const lane = (road && !isSet && road.road && road.road.laneWidth_m) || 3.5;
   const evalH = Math.max(0, num("evalH") || 0);
-  const shape = S.mode === "param" ? { smile: +$("smile").value, hot: targets.hot } : null;
+  const aim = { h: Math.min(2, Math.max(0, num("aimH") || 0)), v: Math.min(1, Math.max(0, num("aimV") || 0)) };
+  const shape = S.mode === "param" ? { smile: Math.min(1, Math.max(0, 1 - (+$("smile").value))), hot: targets.hot } : null;
   const rfZone = { x1: Math.max(0, num("rfX1") ?? 0), x2: num("rfX2") ?? 100, left: Math.abs(num("rfYL") ?? 10), right: Math.abs(num("rfYR") ?? 10) };
   if (!(rfZone.x2 > rfZone.x1) || !(rfZone.left + rfZone.right > 0)) throw new Error("Flux on road zone: 'to' must be beyond 'from', and the width must be more than 0.");
   const rfTarget = num("rfT");
   const roadFlux = { zone: rfZone, target: rfTarget && rfTarget > 0 ? rfTarget : null, lamps: $("rfL").value, height: H, spacing: sp, traffic: lht ? "LHT" : "RHT" };
-  return { beam: S.beam, cls: $("cls").value, key: tableKey(), sym, cut, table, lht, H, sp, checks, evalH, targets, roadFlux, shape, lane, mode: S.mode };
+  return { beam: S.beam, cls: $("cls").value, key: tableKey(), sym, cut, table, lht, H, sp, checks, evalH, targets, roadFlux, shape, aim, lane, mode: S.mode };
 }
 
 function generate() {
@@ -174,7 +187,7 @@ function generate() {
     const prefTxt = c.prefer === "flux" && !nf ? ` Lowest-flux beam: ${fmt(S.res.flux)} lm.` : "";
     const rfTxt = c.rfRelaxed && S.res.roadFlux < c.roadFlux.target ? ` Flux on road minimum relaxed (${fmt(S.res.roadFlux)} of ${fmt(c.roadFlux.target)} lm) so the road checks can pass.` : "";
     const leftTxt = c.leftOut && S.res.roadRows.some(r => r.pass === false && r.id === c.leftOut) ? ` Left out: “${c.leftOut}”, which conflicts with the other checks.` : "";
-    msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s${loopsTxt}. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : "All ECE checks pass.") + (nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : " All road checks pass.") + leftTxt + prefTxt + rfTxt, nf > 0);
+    msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s${loopsTxt}. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : S.res.aimFailCount ? `ECE passes at nominal aim, but ${S.res.aimFailCount} check${S.res.aimFailCount > 1 ? "s fail" : " fails"} inside the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : S.res.aim ? `All ECE checks pass across the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : "All ECE checks pass.") + (c.mode !== "road" ? "" : nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : " All road checks pass.") + leftTxt + prefTxt + rfTxt, nf > 0 || S.res.aimFailCount > 0);
     $("iesOut").value = "";
     renderAll();
   };
@@ -414,7 +427,7 @@ function renderSummary() {
   const mir = c.lht ? -1 : 1;
   const r1 = reach(1), r3 = reach(3);
   $("summary").innerHTML =
-    kv("ECE verdict", nf ? `${nf} of ${n} fail` : `PASS ${n}/${n}`, `Class ${c.cls === "DSES" ? "DS / ES" : c.cls} ${c.beam === "low" ? "passing" : "driving"} beam`, "verdict " + (nf ? "bad" : "ok")) +
+    kv("ECE verdict", nf ? `${nf} of ${n} fail` : r.aimFailCount ? `${r.aimFailCount} fail in aim box` : `PASS ${n}/${n}`, (r.aim && !nf && !r.aimFailCount ? `aim ±${fmt(r.aim.v, 2)}° V, ±${fmt(r.aim.h, 2)}° H · ` : "") + `Class ${c.cls === "DSES" ? "DS / ES" : c.cls} ${c.beam === "low" ? "passing" : "driving"} beam`, "verdict " + (nf || r.aimFailCount ? "bad" : "ok")) +
     kv("Road checks", nrt ? (nr ? `${nr} of ${nrt} missed` : `met ${nrt}/${nrt}`) : "none", c.mode === "road" ? "solved for" : "checked only", "verdict " + (nr ? "bad" : "ok")) +
     kv("Imax", fmt(r.imax) + " cd", asked(t.imax, 0, " cd")) +
     kv("Flux", fmt(r.flux) + " lm", asked(t.flux, 0, " lm") || "emitted, one lamp") +
@@ -430,12 +443,15 @@ function renderSummary() {
 function renderTables() {
   const mir = S.cfg.lht ? -1 : 1;
   $("tblName").textContent = PRESET_TABLES[S.cfg.key].name + " · values in cd";
-  $("ecTbl").innerHTML = "<thead><tr><th>Point</th><th>Position</th><th>Requirement</th><th>Value</th><th>Margin</th><th></th></tr></thead><tbody>" +
+  const hasAim = !!S.res.aim;
+  const aimCell = r => !hasAim ? "" : r.aimMargin == null ? '<td class="n aim"></td>' : `<td class="n aim">${fmt(100 * r.aimMargin, 0)} %${r.aimAt && (r.aimAt[0] || r.aimAt[1]) ? `<small>${angH(mir * r.aimAt[0])} ${angV(r.aimAt[1])}</small>` : ""}</td>`;
+  const pillEce = r => r.pass !== false && r.aimPass === false ? '<span class="pill a" title="Passes at nominal aim, fails inside the aim box">AIM</span>' : pill(r.pass);
+  $("ecTbl").innerHTML = `<thead><tr><th>Point</th><th>Position</th><th>Requirement</th><th>Value</th><th>Margin</th>${hasAim ? "<th>Worst in aim box</th>" : ""}<th></th></tr></thead><tbody>` +
     S.res.rows.map(r => {
-      if (r.kind === "G") return `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>scan at ${r.where}</td><td class="n">${r.max == null ? "≥ " + fmt(r.min, 2) : fmt(r.min, 2) + " to " + fmt(r.max, 2)}</td><td class="n">${fmt(r.val, 3)}</td><td class="n">${fmt(100 * r.margin, 0)} %</td><td>${pill(r.pass)}</td></tr>`;
-      if (r.kind === "cutpos") return `<tr><td class="id">${r.id}</td><td>scan at ${r.where}</td><td class="n">${angV(r.target)}</td><td class="n">${angV(r.val)}</td><td class="n"></td><td>${pill(null)}</td></tr>`;
+      if (r.kind === "G") return `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>scan at ${r.where}</td><td class="n">${r.max == null ? "≥ " + fmt(r.min, 2) : fmt(r.min, 2) + " to " + fmt(r.max, 2)}</td><td class="n">${fmt(r.val, 3)}</td><td class="n">${fmt(100 * r.margin, 0)} %</td>${hasAim ? '<td class="n aim"></td>' : ""}<td>${pill(r.pass)}</td></tr>`;
+      if (r.kind === "cutpos") return `<tr><td class="id">${r.id}</td><td>scan at ${r.where}</td><td class="n">${angV(r.target)}</td><td class="n">${angV(r.val)}</td><td class="n"></td>${hasAim ? '<td class="n aim"></td>' : ""}<td>${pill(null)}</td></tr>`;
       const pos = r.kind === "line" ? "line " + (r.min != null ? "min" : "max") : r.zone ? "zone " + (r.min != null ? "min" : "max") : r.kind === "sum" ? "sum" : r.h != null ? `${angH(mir * r.h)} ${angV(r.v)}` : "global";
-      return `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>${pos}</td><td class="n">${req(r)}</td><td class="n">${fmtCd(r.val)}</td><td class="n">${r.margin == null ? "" : fmt(100 * r.margin, 0) + " %"}</td><td>${pill(r.pass)}</td></tr>`;
+      return `<tr class="${r.pass === false || r.aimPass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>${pos}</td><td class="n">${req(r)}</td><td class="n">${fmtCd(r.val)}</td><td class="n">${r.margin == null ? "" : fmt(100 * r.margin, 0) + " %"}</td>${aimCell(r)}<td>${pillEce(r)}</td></tr>`;
     }).join("") + "</tbody>";
   $("roadMode").textContent = S.cfg.mode === "road" ? "solved for, lamp pair" : (S.res.roadRows.length ? "checked, not solved for" : "");
   const side = y => Math.abs(y) < 0.005 ? "axis" : `${fmt(Math.abs(y), 2)} ${y > 0 ? "R" : "L"}`;
@@ -453,9 +469,9 @@ function renderTables() {
 function setCount(id, rows) {
   const el = $(id), n = rows.filter(r => r.pass != null).length;
   const lo = id === "rdCount" && S.cfg && S.cfg.leftOut && rows.some(r => r.pass === false && r.id === S.cfg.leftOut) ? 1 : 0;
-  const f = rows.filter(r => r.pass === false).length - lo;
-  el.textContent = !n ? "" : f ? `${f} OF ${n} FAIL` : lo ? `${n - 1} OF ${n} PASS · 1 LEFT OUT` : `ALL ${n} PASS`;
-  el.className = "cnt" + (!n ? "" : f ? " f" : " p");
+  const f = rows.filter(r => r.pass === false).length - lo, fa = id === "ecCount" ? rows.filter(r => r.pass !== false && r.aimPass === false).length : 0;
+  el.textContent = !n ? "" : f ? `${f} OF ${n} FAIL` : fa ? `${fa} OF ${n} FAIL IN AIM BOX` : lo ? `${n - 1} OF ${n} PASS · 1 LEFT OUT` : `ALL ${n} PASS`;
+  el.className = "cnt" + (!n ? "" : f || fa ? " f" : " p");
 }
 
 function recomputeRoad() {
@@ -487,8 +503,9 @@ function buildIES() {
     `[LUMINAIRE] ${c.beam === "low" ? "Low beam (passing)" : "High beam (driving)"}, ${PRESET_TABLES[c.key].name}, ${c.lht ? "LHT" : "RHT"}`,
     `[_IMAX] ${Math.round(S.res.imax)} cd`, `[_FLUX] ${Math.round(S.res.flux)} lm`,
     `[_ROADFLUX] ${Math.round(S.res.roadFlux)} lm, ${c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair"}, ${c.roadFlux.zone.x1}-${c.roadFlux.zone.x2} m, ${c.roadFlux.zone.left} m L / ${c.roadFlux.zone.right} m R`,
-    ...(c.shape ? [`[_QFACTOR] ${c.shape.smile}`] : []),
+    ...(c.shape ? [`[_QFACTOR] ${qOut()}`] : []),
     ...(S.res.G ? [`[_CUTOFF] G ${S.res.G.toFixed(3)} at 2.5 deg, cut-off at ${Math.abs(S.res.cutPos).toFixed(2)} deg D`] : []),
+    ...(S.res.aim ? [`[_AIMBOX] passes ECE within +/-${S.res.aim.v} deg V, +/-${S.res.aim.h} deg H: ${S.res.aimFailCount ? "no" : "yes"}`] : []),
     `[_MODEL] ${S.P.model === "hybrid" ? "hybrid: square-root core + lobes" : S.P.model === "sqrt" ? "square-root fall-off" : "Gaussian lobes"}`,
     `[_GENERATED] ${new Date().toISOString().slice(0, 10)}`,
     "TILT=NONE",
@@ -533,7 +550,7 @@ $("paramCopy").onclick = () => {
       core: { law: "I = A * exp(-k * (sqrt(rho + eps) - sqrt(eps))), rho = 1 at 5 % of A", A_cd: Math.round(P.A), centre_deg: { h: r2(P.h0), v: r2(P.v0) },
         extent_deg: { left: r2(P.Rl), right: r2(P.Rr), down: r2(P.Rd), up: r2(P.Ru) }, k: r2(P.kn), eps: r2(P.eps) },
       lobes: P.lobes.map((c, i) => ({ name: ["spread", "foreground"][i], A_cd: Math.round(c.A), h_deg: r2(c.h), v_deg: r2(c.v), sigmaH_deg: r2(c.sh), sigmaV_deg: r2(c.sv) })),
-      qFactor: S.cfg.shape ? S.cfg.shape.smile : 0, glareFloor_cd: S.cfg.beam === "low" ? Math.round(P.sigA) : 0 };
+      qFactor: qOut(), glareFloor_cd: S.cfg.beam === "low" ? Math.round(P.sigA) : 0 };
     const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy")); return;
   }
   if (S.P.model === "sqrt") {
@@ -542,14 +559,14 @@ $("paramCopy").onclick = () => {
       law: "I = Imax * exp(-k * (sqrt(rho + eps) - sqrt(eps))), rho = 1 at the 5 % isoline", note: "Internal frame is RHT; LHT mirrors H.",
       cutoff: S.cfg.beam === "low" ? S.cfg.cut : null, Imax_cd: Math.round(P.A), centre_deg: { h: r2(P.h0), v: r2(P.v0) },
       extent_5pct_deg: { left: r2(P.Rl), right: r2(P.Rr), down: r2(P.Rd), up: r2(P.Ru) }, k: r2(P.kn), eps: r2(P.eps),
-      qFactor: S.cfg.shape ? S.cfg.shape.smile : 0, glareFloor_cd: S.cfg.beam === "low" ? Math.round(P.sigA) : 0 };
+      qFactor: qOut(), glareFloor_cd: S.cfg.beam === "low" ? Math.round(P.sigA) : 0 };
     const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy")); return;
   }
   const r2 = x => Math.round(x * 1000) / 1000;
   const o = { function: S.cfg.beam, class: S.cfg.cls, traffic: S.cfg.lht ? "LHT" : "RHT", note: "Internal frame is RHT; LHT mirrors H.", cutoff: S.cfg.beam === "low" ? S.cfg.cut : null,
     lobes: S.P.comps.map((c, i) => ({ name: ["hot spot", "spread", "foreground"][i], A_cd: Math.round(c.A), h_deg: r2(c.h), v_deg: r2(c.v), sigmaH_deg: r2(c.sh), sigmaV_deg: r2(c.sv) })),
     roadFlux: { value_lm: Math.round(S.res.roadFlux), target_lm: S.res.roadFluxTarget, lamps: S.cfg.roadFlux.lamps, zone: S.cfg.roadFlux.zone },
-    qFactor: S.cfg.shape ? S.cfg.shape.smile : 0,
+    qFactor: qOut(),
     glareFloor_cd: S.cfg.beam === "low" ? Math.round(S.P.sigA) : 0 };
   const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy"));
 };

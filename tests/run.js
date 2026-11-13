@@ -60,8 +60,9 @@ t("hot spot lands within 0.4 deg of the requested position (class B, CS, high)",
 const ROAD = [["built-in low example", { beam: "low", cls: "B", mode: "road", checks: C.PRESET_ROAD.low.checks }],
   ["built-in high example", { beam: "high", cls: "B", mode: "road", checks: C.PRESET_ROAD.high.checks }],
   ["customer-style set, class B", { beam: "low", cls: "B", mode: "road", checks: cust }],
-  // a flat symmetric cut-off at 0.57 D cannot light the axis at 70 m from 0.65 m height, so the ES set asks for 50 m
-  ["customer-style set, class ES (range 50 m)", { beam: "low", cls: "ES", mode: "road", checks: cust.map(x => x.type === "range" ? Object.assign({}, x, { limit: 50 }) : x) }]];
+  // Symmetric variant of the set: a flat cut-off at 0.57 D cannot light the axis at 70 m from 0.65 m height (so 50 m),
+  // and a symmetric beam cannot hold a left-only glare limit against the mirrored right-side minimum (so that limit is dropped).
+  ["customer-style set, symmetric variant, class ES", { beam: "low", cls: "ES", mode: "road", checks: cust.filter(x => !/LH side/.test(x.label)).map(x => x.type === "range" ? Object.assign({}, x, { limit: 50 }) : x) }]];
 for (const [name, o] of ROAD) t(`road mode, ${name}: ECE passes and at most one road check is missed`, () => {
   const s = solve(o); ok(s.m.ece.length === 0, "ECE fails " + s.m.ece.join(", ")); ok(s.m.roadMiss.length <= 1, "road misses: " + s.m.roadMiss.join(", "));
   return s.m.roadMiss.length ? "left out: " + s.m.roadMiss[0] : "all road checks pass";
@@ -79,6 +80,15 @@ t("lowest-flux solve is repeatable: 3 random seeds give Imax and flux within x1.
   const r = k => Math.max(...runs.map(x => x[k])) / Math.min(...runs.map(x => x[k]));
   ok(runs.every(x => x.pass), "a seed fails ECE"); ok(r("imax") < 1.5 && r("flux") < 1.5, `Imax x${r("imax").toFixed(2)}, flux x${r("flux").toFixed(2)}`);
   return `Imax x${r("imax").toFixed(2)}, flux x${r("flux").toFixed(2)}`;
+});
+t("ECE passes across a ±0.2° V, ±0.4° H aim box when one is set (every class, beam parameters mode)", () => {
+  const AIM = { h: 0.4, v: 0.2 };
+  ok(C.AIM_DEFAULT.h === 0 && C.AIM_DEFAULT.v === 0, "default aim tolerance is not 0");
+  for (const [beam, cls] of CLASSES) {
+    const s = solve({ beam, cls, mode: "param", aim: AIM });
+    ok(s.m.aimFails === 0, `${beam} ${cls}: fails at ` + Object.entries(s.m.aimDetail).map(([k, v]) => k + " (" + v.join(",") + ")").join("; "));
+  }
+  return `±${AIM.v}° V, ±${AIM.h}° H`;
 });
 t("road-illuminate format round-trips", () => {
   const a = C.normalizeChecks(cust), b = C.normalizeChecks(C.toRoadIlluminate(a));

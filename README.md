@@ -8,13 +8,15 @@ It runs entirely in the browser: open `docs/index.html`, or the GitHub Pages sit
 
 - **Two ways to define the beam**
   - **Road requirement (JSON):** give customer requirements on the road and the tool solves for a beam that meets them. The format is the same requirement set used in [road-illuminate](https://github.com/jalibakthermk/Road-illuminate), so one customer-spec file works in both tools.
-  - **Beam parameters:** beam function, R149 class, maximum intensity (cd), luminous flux (lm), horizontal spread (±°, half-width at 5 % of Imax), vertical spread (°, height at 5 % of Imax), hot spot position and Q factor.
+  - **Beam parameters:** maximum intensity (cd), luminous flux (lm), horizontal spread (±°, half-width at 5 % of Imax), vertical spread (°, height at 5 % of Imax), hot spot position and Q factor.
     - **Hot spot position** (H, V in degrees). Defaults: 75R (1.15R 0.57D) for Class B, mirrored to 75L in left-hand traffic; 0.86D on V-V for the symmetric classes; H-V for the high beam. The solver holds the peak within about 0.1–0.3° of it.
-    - **Q factor** (0–1, default 0.3) shapes the bottom of the beam. At 0 a wide beam forms a "+" (a tall hot spot crossing a flat band); as Q rises the beam bends upward toward the sides and the lower part narrows there, so the isolines curve like a smile. Q does not move the hot spot or change the H spread; a strong smile can deepen the beam on the axis and increase the V spread.
+    - **Q factor** (0–1, default 0.7) shapes the bottom of the beam. At 1 a wide beam forms a "+" (a tall hot spot crossing a flat band); as Q falls toward 0 the beam bends upward toward the sides and the lower part narrows there, so the isolines curve like a smile. Q does not move the hot spot or change the H spread; a strong smile can deepen the beam on the axis and increase the V spread.
   - Requirement files can be uploaded (click or drag and drop) or pasted.
+  - **Beam function and class** are set once, above the two input modes, and apply to both. A requirement file that names `function` and `class` sets them when it is loaded.
 - **Lowest flux by default.** In road requirement mode with no flux target, the tool returns the beam that meets ECE and every road check with the least emitted flux.
 - **Flux on road** (optional minimum). The luminous flux that reaches the road surface inside a zone you define (distance from–to, width left and right), for one lamp or the lamp pair. The page always reports it, with the road share (the fraction of the emitted flux that lands in the zone). Set a minimum only when one is required; it then counts like a road check, and is the first requirement to give way if the checks conflict. The default zone is 0–100 m ahead, 10 m left and 10 m right, evaluated for one lamp.
 - **Cut-off as R149 measures it.** The cut-off is checked by the regulation's instrumental method: a vertical scan at 2.5° from V-V with G = log E(β) − log E(β + 0.1°). You set the sharpness G (default 0.25); the compliance table shows the measured G (0.13 to 0.40 for asymmetric beams, at least 0.13 or 0.08 for the symmetric classes) and the measured cut-off position.
+- **Aim tolerance** (optional, default 0). Give a tolerance in ±° vertical and ±° horizontal and the beam is solved to pass the ECE table with the lamp mis-aimed anywhere in that box; the compliance table then shows the worst margin in the box for each point. At 0 the beam is solved for nominal aim only. A Class B beam can pass up to about ±0.4° H with ±0.2° V; beyond that the cut-off shoulder reaches the 75R point.
 - **ECE compliance is enforced while solving.** The regulation test table for the selected class is a hard constraint; your parameters are soft targets. If a request cannot meet ECE, the tool shows the closest compliant result and reports requested against achieved values.
 - **Iso-candela view** in cd or lx at 25 m, with test points, zones, the cut-off line and the hot spot.
 - **Road illumination** for the lamp pair, top view with lane markings, using either *vertical planes on road* (the HSPR / GTB method, default) or *road surface* (horizontal plane) illuminance.
@@ -48,6 +50,7 @@ Paste a road-illuminate requirement set as it is (a list of checks), or wrap it 
   "plane": "vertical",
   "evalHeight_m": 0,
   "road": { "laneWidth_m": 3.5 },
+  "aimTolerance": { "v_deg": 0, "h_deg": 0 },
   "roadFlux": { "target_lm": null, "lamps": "one", "zone": { "x1": 0, "x2": 100, "left": 10, "right": 10 } },
   "checks": [
     { "label": "Ego lane 50 m", "type": "point", "x": 50, "y": 0, "op": ">=", "limit": 8 },
@@ -70,6 +73,7 @@ Paste a road-illuminate requirement set as it is (a list of checks), or wrap it 
 - `z` (optional, per check) sets that check's evaluation height. This is a Beam Synth extension; road-illuminate ignores it.
 - `class` (optional): `B`, `CS`, `DS`, `ES` for the passing beam; `B`, `BS`, `CS`, `DSES` for the driving beam.
 - `targets` (optional) are soft goals: `imax`, `flux_lm`, `spreadH_deg`, `spreadV_deg`. Without `flux_lm` the solver returns the lowest-flux beam that passes.
+- `aimTolerance` (optional): `v_deg` and `h_deg`, the half-sizes of the aim box in degrees.
 - `roadFlux` (optional): `target_lm` (a minimum flux on road in lm; `null` for none), `lamps` (`one` or `pair`), and `zone` with `x1`, `x2` (m ahead) and `left`, `right` (m, positive extents).
 
 Examples are in [`examples/`](examples).
@@ -96,11 +100,11 @@ so ln I falls with the square root of the distance. Rh and Rv are the extents to
 
 **Cut-off.** For the low beam the cut-off is defined on the logarithm of intensity, as R149 Annex 5 scans it. With m the lit fraction (1 well below the cut-off line, 0 well above, a logistic in between), the beam s and the floor F are mixed geometrically, E = s^m · F^(1−m). The log of E then follows an S-curve whose inflection sits on the cut-off line (horizontal elbow at 0.57° D with a 15° shoulder for Class B, flat for the symmetric classes) and whose steepest slope is G. The floor is a glare term that lights the signal points P1–P8, plus 0.3 % of the beam as stray light. The cut-off position and G are part of the solve; a short calibration afterwards corrects the width and offset if the measured scan is off.
 
-The Q factor makes the beam shallower toward the sides (square-root part) and bends the lobes upward there, so the lower isolines curve like a smile.
+A low Q factor makes the beam shallower toward the sides (square-root part) and bends the lobes upward there, so the lower isolines curve like a smile.
 
 **Solving.** All three models use the same solver, a CMA-ES search (diagonal covariance) whose rounds stop when they converge.
 
-1. **Find a beam that passes.** ECE, the cut-off scan and the road checks, with no pressure on flux.
+1. **Find a beam that passes.** ECE (at nominal aim and, when an aim tolerance is set, at the four corners of the aim box), the cut-off scan and the road checks, with no pressure on flux.
 2. **If checks are still missed** (road requirement mode): the missed checks get double weight and the search continues. If more than one still fails, a flux-on-road minimum gives way first; after that the check missed by the widest margin is left out (marked LEFT OUT in the road table).
 3. **Reduce flux** (road requirement mode without a flux target): from the passing beam, the search restarts with flux in the cost, in rounds, until a round gains under 1 %.
 4. **Calibrate the cut-off** to the R149 scan.
@@ -109,7 +113,7 @@ ECE outranks the road checks throughout, and the best result over all stages is 
 
 ## Tests
 
-`npm test` (or `node tests/run.js`) runs the test suite: numerics, every class against its ECE table, the R149 cut-off, road requirement sets and repeatability across random seeds. `npm run bench` solves a fixed set of 12 cases and prints the metrics each change is judged on; `tests/bench-baseline.json` and `tests/bench-phase2.json` hold the results before and after the changes in [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md).
+`npm test` (or `node tests/run.js`) runs the test suite: numerics, every class against its ECE table, the R149 cut-off, road requirement sets and repeatability across random seeds, and the aim box. `npm run bench` solves a fixed set of 12 cases and prints the metrics each change is judged on (`BS_AIM="0.4,0.2" npm run bench` solves them with an aim box); the `tests/bench-*.json` files hold the results before and after the changes in [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md).
 
 ## Repository layout
 
