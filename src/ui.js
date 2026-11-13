@@ -13,8 +13,8 @@ function compactJSON(o) {
 }
 // classes per beam function; key = PRESET_TABLES entry
 const CLASSES = {
-  low: [["B", "B — asymmetric", "low"], ["CS", "CS — symmetric", "low_CS"], ["DS", "DS — symmetric", "low_DS"], ["ES", "ES — symmetric", "low_ES"]],
-  high: [["B", "With Class B (asym.)", "high"], ["BS", "BS — symmetric", "high_BS"], ["CS", "CS — symmetric", "high_CS"], ["DSES", "DS / ES — symmetric", "high_DSES"]]
+  low: [["B", "B (asymmetric)", "low"], ["CS", "CS (symmetric)", "low_CS"], ["DS", "DS (symmetric)", "low_DS"], ["ES", "ES (symmetric)", "low_ES"]],
+  high: [["B", "With Class B (asym.)", "high"], ["BS", "BS (symmetric)", "high_BS"], ["CS", "CS (symmetric)", "high_CS"], ["DSES", "DS / ES (symmetric)", "high_DSES"]]
 };
 const tableKey = () => (CLASSES[S.beam].find(c => c[0] === $("cls").value) || CLASSES[S.beam][0])[2];
 const isSym = () => S.beam === "low" && $("cls").value !== "B";
@@ -220,7 +220,8 @@ function generate() {
     const leftTxt = c.leftOut && S.res.roadRows.some(r => r.pass === false && r.id === c.leftOut) ? ` Left out: “${c.leftOut}”, which conflicts with the other checks.` : "";
     msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s${loopsTxt}. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : S.res.aimFailCount ? `ECE passes at nominal aim, but ${S.res.aimFailCount} check${S.res.aimFailCount > 1 ? "s fail" : " fails"} inside the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : S.res.aim ? `All ECE checks pass across the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : "All ECE checks pass.") + (c.mode !== "road" ? "" : nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : " All road checks pass.") + leftTxt + prefTxt + rfTxt + physTxt, nf > 0 || S.res.aimFailCount > 0);
     $("iesOut").value = "";
-    renderAll();
+    $("progBar").style.width = "0";
+    renderAll(); showResults();
   };
   setTimeout(tick, 20);
 }
@@ -315,7 +316,7 @@ function drawIso() {
   drawField(g, box, vals, nx, ny, lv, colors);
   const X = hh => box.x + (hh - view.h0) / (view.h1 - view.h0) * box.w, Y = vv => box.y + (view.v1 - vv) / (view.v1 - view.v0) * box.h;
   // grid + axes
-  g.font = "11px " + css("--f-mono"); g.fillStyle = css("--plot-dim"); g.textAlign = "center";
+  g.font = "11px " + css("--f-body"); g.fillStyle = css("--plot-dim"); g.textAlign = "center";
   const hs = view.h1 > 40 ? 10 : 5, vs = (view.v1 - view.v0) > 16 ? 4 : 2;
   for (let a = Math.ceil(view.h0 / hs) * hs; a <= view.h1; a += hs) { g.strokeStyle = a === 0 ? css("--plot-axis") : css("--plot-grid"); g.beginPath(); g.moveTo(X(a) + .5, box.y); g.lineTo(X(a) + .5, box.y + box.h); g.stroke(); g.fillText(a === 0 ? "V" : Math.abs(a) + (a < 0 ? "L" : "R"), X(a), h - 8); }
   g.textAlign = "right";
@@ -334,13 +335,13 @@ function drawIso() {
       if (e.line) {
         g.beginPath(); g.moveTo(X(mir * e.line[0][0]), Y(e.line[0][1])); g.lineTo(X(mir * e.line[1][0]), Y(e.line[1][1]));
         g.strokeStyle = status[e.id] === false ? fail : "rgba(255,255,255,.55)"; g.setLineDash([2, 3]); g.lineWidth = 1.4; g.stroke(); g.setLineDash([]); g.lineWidth = 1;
-        g.fillStyle = "rgba(255,255,255,.7)"; g.textAlign = "left"; g.font = "10px " + css("--f-mono");
+        g.fillStyle = "rgba(255,255,255,.7)"; g.textAlign = "left"; g.font = "10px " + css("--f-body");
         g.fillText(e.id, X(mir * Math.max(e.line[0][0], e.line[1][0])) + 4, Y(e.line[1][1]) + 3);
       }
       if (e.zone) {
         g.beginPath(); e.zone.forEach((p, i) => i ? g.lineTo(X(mir * p[0]), Y(p[1])) : g.moveTo(X(mir * p[0]), Y(p[1]))); g.closePath();
         g.strokeStyle = status[e.id] === false ? fail : "rgba(255,255,255,.35)"; g.setLineDash([2, 3]); g.stroke(); g.setLineDash([]);
-        g.fillStyle = "rgba(255,255,255,.6)"; g.textAlign = "left"; g.font = "10px " + css("--f-mono");
+        g.fillStyle = "rgba(255,255,255,.6)"; g.textAlign = "left"; g.font = "10px " + css("--f-body");
         const p0 = e.zone[0]; g.fillText(e.id, X(mir * p0[0]) + (mir > 0 ? 3 : -40), Y(p0[1]) - 3);
       }
     });
@@ -349,7 +350,7 @@ function drawIso() {
       const st = status[e.id], x = X(mir * e.h), y = Y(e.v);
       g.beginPath(); g.arc(x, y, 3.5, 0, 7);
       g.fillStyle = st === false ? fail : st === true ? pass : "#9fb0bd"; g.fill(); g.strokeStyle = "#0d151d"; g.lineWidth = 1; g.stroke();
-      g.fillStyle = "#e6eef4"; g.font = "10px " + css("--f-mono"); g.textAlign = "left"; g.fillText(e.id, x + 5, y - 4);
+      g.fillStyle = "#e6eef4"; g.font = "10px " + css("--f-body"); g.textAlign = "left"; g.fillText(e.id, x + 5, y - 4);
     });
   }
   // hot spot
@@ -378,7 +379,7 @@ function drawRoad() {
   for (let j = 0; j < ny; j++) { const y = view.y0 + j * (view.y1 - view.y0) / (ny - 1); for (let i = 0; i < nx; i++) { const x = Math.max(0.5, view.x0 + i * (view.x1 - view.x0) / (nx - 1)); vals[j * nx + i] = luxDisp(x, y); } }
   drawField(g, box, vals, nx, ny, lv, colors);
   const X = x => box.x + (x - view.x0) / (view.x1 - view.x0) * box.w, Y = y => box.y + (y - view.y0) / (view.y1 - view.y0) * box.h;
-  g.font = "11px " + css("--f-mono"); g.fillStyle = css("--plot-dim"); g.textAlign = "center";
+  g.font = "11px " + css("--f-body"); g.fillStyle = css("--plot-dim"); g.textAlign = "center";
   const xs = view.x1 > 200 ? 50 : 25;
   for (let a = 0; a <= view.x1; a += xs) { g.strokeStyle = css("--plot-grid"); g.beginPath(); g.moveTo(X(a) + .5, box.y); g.lineTo(X(a) + .5, box.y + box.h); g.stroke(); g.fillText(a + (a === view.x1 - (view.x1 % xs) ? " m" : ""), X(a), h - 8); }
   g.textAlign = "right";
@@ -448,15 +449,15 @@ hookRead($("isoCv"), "iso"); hookRead($("roadCv"), "road");
 // ---------- summary + tables ----------
 function kv(label, value, sub, cls) { return `<div class="kv ${cls || ""}"><b>${label}</b><span>${value}</span>${sub ? `<em>${sub}</em>` : ""}</div>`; }
 function req(r, unit) { const p = []; if (r.min != null) p.push("≥ " + (unit === "lx" ? fmt(r.min, 2) : fmtCd(r.min))); if (r.max != null) p.push("≤ " + (unit === "lx" ? fmt(r.max, 2) : fmtCd(r.max))); return p.join(", ") || "info"; }
-function pillRoad(r) { return r.pass === false && S.cfg && S.cfg.leftOut === r.id ? '<span class="pill i" title="Left out: it conflicts with the other checks">LEFT OUT</span>' : pill(r.pass); }
-function pill(p) { return p === true ? '<span class="pill p">PASS</span>' : p === false ? '<span class="pill f">FAIL</span>' : '<span class="pill i">INFO</span>'; }
+function pillRoad(r) { return r.pass === false && S.cfg && S.cfg.leftOut === r.id ? '<span class="pill i" title="Left out: it conflicts with the other checks">Left out</span>' : pill(r.pass); }
+function pill(p) { return p === true ? '<span class="pill p">Pass</span>' : p === false ? '<span class="pill f">Fail</span>' : '<span class="pill i">Info</span>'; }
 
 // what the beam asks of the light source and the aperture
 function physTiles(p) {
   if (!p) return "";
-  const led = p && p.ledFlux ? kv("LED flux", fmt(p.ledFlux) + " lm", `at ${fmt(p.eff * 100)} % efficiency` + (p.minEmit ? ` · emitting area ≥ ${fmt(p.minEmit, 1)} mm²` : "")) : kv("LED flux", "—", "set the optical efficiency");
+  const led = p && p.ledFlux ? kv("LED flux", fmt(p.ledFlux) + " lm", `at ${fmt(p.eff * 100)} % efficiency` + (p.minEmit ? `, emitting area ≥ ${fmt(p.minEmit, 1)} mm²` : "")) : kv("LED flux", "—", "set the optical efficiency");
   const ap = !p || !p.lum ? kv("Min aperture", "—", "set the LED luminance")
-    : p.imaxCap ? kv("Imax limit", fmt(p.imaxCap) + " cd", `${fmt(p.lum)} Mcd/m² × ${fmt(p.area)} mm² · ${fmt(100 * p.apertureUsed)} % used`)
+    : p.imaxCap ? kv("Imax limit", fmt(p.imaxCap) + " cd", `${fmt(p.lum)} Mcd/m² × ${fmt(p.area)} mm², ${fmt(100 * p.apertureUsed)} % used`)
     : kv("Min aperture", fmt(p.minAperture) + " mm²", `lit area needed for Imax at ${fmt(p.lum)} Mcd/m²`);
   return led + ap;
 }
@@ -468,12 +469,12 @@ function renderSummary() {
   const r1 = reach(1), r3 = reach(3);
   $("summary").classList.toggle("six", !!r.phys);
   $("summary").innerHTML =
-    kv("ECE verdict", nf ? `${nf} of ${n} fail` : r.aimFailCount ? `${r.aimFailCount} fail in aim box` : `PASS ${n}/${n}`, (r.aim && !nf && !r.aimFailCount ? `aim ±${fmt(r.aim.v, 2)}° V, ±${fmt(r.aim.h, 2)}° H · ` : "") + `Class ${c.cls === "DSES" ? "DS / ES" : c.cls} ${c.beam === "low" ? "passing" : "driving"} beam`, "verdict " + (nf || r.aimFailCount ? "bad" : "ok")) +
-    kv("Road checks", nrt ? (r.phys ? `met ${nrt - nr}/${nrt}` : nr ? `${nr} of ${nrt} missed` : `met ${nrt}/${nrt}`) : "none", c.mode === "road" ? "solved for" : "checked only", "verdict " + (nr ? "bad" : "ok")) +
+    kv("ECE verdict", nf ? `${nf} of ${n} fail` : r.aimFailCount ? `${r.aimFailCount} fail in aim box` : `Pass ${n}/${n}`, (r.aim && !nf && !r.aimFailCount ? `aim ±${fmt(r.aim.v, 2)}° V, ±${fmt(r.aim.h, 2)}° H, ` : "") + `Class ${c.cls === "DSES" ? "DS / ES" : c.cls} ${c.beam === "low" ? "passing" : "driving"} beam`, "verdict " + (nf || r.aimFailCount ? "bad" : "ok")) +
+    kv("Road checks", nrt ? (r.phys ? `Met ${nrt - nr}/${nrt}` : nr ? `${nr} of ${nrt} missed` : `Met ${nrt}/${nrt}`) : "none", c.mode === "road" ? "solved for" : "checked only", "verdict " + (!nrt ? "" : !nr ? "ok" : c.mode === "road" ? "bad" : "")) +
     kv("Imax", fmt(r.imax) + " cd", asked(t.imax, 0, " cd")) +
     kv("Flux", fmt(r.flux) + " lm", asked(t.flux, 0, " lm") || "emitted, one lamp") +
     physTiles(r.phys) +
-    kv("Flux on road", r.roadFlux == null ? "—" : fmt(r.roadFlux) + " lm", (r.roadFluxTarget ? `minimum ${fmt(r.roadFluxTarget)} lm · ` : "") + (c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair")) +
+    kv("Flux on road", r.roadFlux == null ? "—" : fmt(r.roadFlux) + " lm", (r.roadFluxTarget ? `minimum ${fmt(r.roadFluxTarget)} lm, ` : "") + (c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair")) +
     kv("Road share", r.roadFlux == null || !r.flux ? "—" : fmt(100 * r.roadFlux / (r.flux * (c.roadFlux.lamps === "one" ? 1 : 2))) + " %", `of emitted flux, ${fmt(c.roadFlux.zone.x1)}–${fmt(c.roadFlux.zone.x2)} m, ${fmt(c.roadFlux.zone.left, 1)} L / ${fmt(c.roadFlux.zone.right, 1)} R`) +
     kv("H spread", "±" + fmt(r.sp.spreadH, 1) + "°", asked(t.spreadH, 1, "°") || `${angH(mir < 0 ? -r.sp.right : r.sp.left)} … ${angH(mir < 0 ? -r.sp.left : r.sp.right)}`) +
     kv("V spread", fmt(r.sp.spreadV, 1) + "°", asked(t.spreadV, 1, "°")) +
@@ -487,8 +488,8 @@ function renderTables() {
   $("tblName").textContent = PRESET_TABLES[S.cfg.key].name + " · values in cd";
   const hasAim = !!S.res.aim;
   const aimCell = r => !hasAim ? "" : r.aimMargin == null ? '<td class="n aim"></td>' : `<td class="n aim">${fmt(100 * r.aimMargin, 0)} %${r.aimAt && (r.aimAt[0] || r.aimAt[1]) ? `<small>${angH(mir * r.aimAt[0])} ${angV(r.aimAt[1])}</small>` : ""}</td>`;
-  const pillEce = r => r.pass !== false && r.aimPass === false ? '<span class="pill a" title="Passes at nominal aim, fails inside the aim box">AIM</span>' : pill(r.pass);
-  $("ecTbl").innerHTML = `<thead><tr><th>Point</th><th>Position</th><th>Requirement</th><th>Value</th><th>Margin</th>${hasAim ? "<th>Worst in aim box</th>" : ""}<th></th></tr></thead><tbody>` +
+  const pillEce = r => r.pass !== false && r.aimPass === false ? '<span class="pill a" title="Passes at nominal aim, fails inside the aim box">Aim</span>' : pill(r.pass);
+  $("ecTbl").innerHTML = `<thead><tr><th>Point</th><th>Position</th><th class="n">Requirement</th><th class="n">Value</th><th class="n">Margin</th>${hasAim ? '<th class="n">Worst in aim box</th>' : ""}<th>Result</th></tr></thead><tbody>` +
     S.res.rows.map(r => {
       if (r.kind === "G") return `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>scan at ${r.where}</td><td class="n">${r.max == null ? "≥ " + fmt(r.min, 2) : fmt(r.min, 2) + " to " + fmt(r.max, 2)}</td><td class="n">${fmt(r.val, 3)}</td><td class="n">${fmt(100 * r.margin, 0)} %</td>${hasAim ? '<td class="n aim"></td>' : ""}<td>${pill(r.pass)}</td></tr>`;
       if (r.kind === "cutpos") return `<tr><td class="id">${r.id}</td><td>scan at ${r.where}</td><td class="n">${angV(r.target)}</td><td class="n">${angV(r.val)}</td><td class="n"></td>${hasAim ? '<td class="n aim"></td>' : ""}<td>${pill(null)}</td></tr>`;
@@ -504,7 +505,7 @@ function renderTables() {
     : `${fmt(c.x1)}–${fmt(c.x2)} m, ${fmt(Math.abs(c.y1), 2)}${c.y1 >= 0 ? "R" : "L"}–${fmt(Math.abs(c.y2), 2)}${c.y2 >= 0 ? "R" : "L"}, ${c.stat}`;
   const vfmt = r => r.unit === "m" ? (r.check.type === "range" && r.reach == null ? "not reached" : fmt(r.val, 1) + " m") : fmt(r.val, 2) + " lx";
   const rq = r => (r.min != null ? "≥ " + fmt(r.min, r.unit === "m" ? 0 : 2) : "≤ " + fmt(r.max, r.unit === "m" ? 0 : 2)) + " " + r.unit;
-  $("rdTbl").innerHTML = S.res.roadRows.length ? "<thead><tr><th>Check</th><th>Type</th><th>Where</th><th>Requirement</th><th>Value</th><th></th></tr></thead><tbody>" +
+  $("rdTbl").innerHTML = S.res.roadRows.length ? "<thead><tr><th>Check</th><th>Type</th><th>Where</th><th class='n'>Requirement</th><th class='n'>Value</th><th>Result</th></tr></thead><tbody>" +
     S.res.roadRows.map(r => `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>${r.check.type}</td><td>${where(r.check)}${r.check.zEval ? `, z ${fmt(r.check.zEval, 2)} m` : ""}</td><td class="n">${rq(r)}</td><td class="n">${vfmt(r)}</td><td>${pillRoad(r)}</td></tr>`).join("") + "</tbody>"
     : `<tbody><tr><td class="note" style="white-space:normal">No road checks for this beam function. Switch to Road requirement mode or paste a requirement set.</td></tr></tbody>`;
 }
@@ -513,8 +514,9 @@ function setCount(id, rows) {
   const el = $(id), n = rows.filter(r => r.pass != null).length;
   const lo = id === "rdCount" && S.cfg && S.cfg.leftOut && rows.some(r => r.pass === false && r.id === S.cfg.leftOut) ? 1 : 0;
   const f = rows.filter(r => r.pass === false).length - lo, fa = id === "ecCount" ? rows.filter(r => r.pass !== false && r.aimPass === false).length : 0;
-  el.textContent = !n ? "" : f ? `${f} OF ${n} FAIL` : fa ? `${fa} OF ${n} FAIL IN AIM BOX` : lo ? `${n - 1} OF ${n} PASS · 1 LEFT OUT` : `ALL ${n} PASS`;
-  el.className = "cnt" + (!n ? "" : f || fa ? " f" : " p");
+  el.textContent = !n ? "" : f ? `${f} of ${n} fail` : fa ? `${fa} of ${n} fail in aim box` : lo ? `${n - 1} of ${n} pass, 1 left out` : `All ${n} pass`;
+  const quiet = id === "rdCount" && S.cfg && S.cfg.mode !== "road";   // road checks that were only checked, not solved for
+  el.className = "cnt" + (!n ? "" : f || fa ? (quiet ? "" : " f") : " p");
 }
 
 function recomputeRoad() {
@@ -637,7 +639,29 @@ $("paramCopy").onclick = () => {
   el.addEventListener("toggle", () => { try { localStorage.setItem(key, el.open ? "open" : "closed"); } catch (e) { } });
 });
 
+// ---------- setting groups: show the current values in each group's header ----------
+function updateSecs() {
+  const v = id => $(id).value.trim(), n = id => parseFloat($(id).value), set = (id, t) => { if ($(id)) $(id).textContent = t; };
+  set("svVeh", `${v("traffic")}, ${v("mh") || "?"} m high, ${v("sp") || "?"} m apart` + (n("evalH") > 0 ? `, read at ${v("evalH")} m` : ""));
+  set("svPhys", !$("physOn").checked ? "Off" : n("apW") > 0 && n("apH") > 0 ? `${v("apW")} × ${v("apH")} mm, ${v("ledL")} Mcd/m²` : `No aperture limit, ${v("eff") || "?"} % efficiency`);
+  set("svAim", n("aimV") > 0 || n("aimH") > 0 ? `±${n("aimV") || 0}° V, ±${n("aimH") || 0}° H` : "Nominal aim only");
+  set("svRf", (n("rfT") > 0 ? `Minimum ${v("rfT")} lm` : "No minimum") + `, ${v("rfX1") || 0}–${v("rfX2") || "?"} m`);
+  set("svCut", `G ${v("cG") || "?"}, elbow ${v("cElbow") || "?"}°`);
+  let preset = true; try { preset = v("tableJson") === String(tableFor(tableKey())).trim(); } catch (e) { }
+  set("svTbl", preset ? "Preset" : "Edited");
+}
+document.querySelector("aside").addEventListener("input", updateSecs);
+document.querySelector("aside").addEventListener("change", () => setTimeout(updateSecs, 0));
+document.querySelector("aside").addEventListener("click", () => setTimeout(updateSecs, 0));
+// on a narrow screen the results sit below the settings: bring them into view after a run the user started
+$("go").addEventListener("click", () => { S.userRun = true; }, true);
+function showResults() {
+  if (!S.userRun) return; S.userRun = false;
+  if (matchMedia("(max-width:900px)").matches) $("summary").scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth" });
+}
+
 // ---------- start ----------
 fillClasses("B"); syncCut(); showTable(); setRoadFluxDefault(); setHotDefault();
+updateSecs();
 setTimeout(generate, 50);
 })();

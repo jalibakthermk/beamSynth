@@ -6,153 +6,207 @@
 <title>Beam Synth</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap">
 <style>
-/* Layout: instrument bench — input rail on the left, two dark "screens" (goniometer + road) on the right, results below. */
+/* Bench layout: a control rail that stays in view with the Generate action pinned to its foot; results on the right
+   read top-down as verdict, figures, plots, tables, export. Dark panels are the two photometric plots only. */
 :root{
-  --bg:#eef1f3; --surface:#ffffff; --sunk:#e4e9ec; --ink:#14202b; --muted:#566774; --line:#d3dbe1;
-  --accent:#a95f00; --accent-ink:#ffffff; --accent-soft:#f6e6cf;
-  --pass:#22804a; --fail:#c3352b; --info:#6b7b88;
-  --plot-bg:#0d151d; --plot-ink:#c7d4de; --plot-dim:#7d8d9a; --plot-grid:rgba(199,212,222,.13); --plot-axis:rgba(199,212,222,.45);
+  --bg:#f3f5f6; --surface:#ffffff; --sunk:#e9edf0; --ink:#15212b; --muted:#55656f; --line:#d5dce1; --line-soft:#e6ebee;
+  --accent:#9a5600; --accent-ink:#ffffff; --accent-soft:#f7e9d3;
+  --pass:#1f7a45; --fail:#c0332a; --info:#6b7b88;
+  --plot-bg:#0d151d; --plot-ink:#c7d4de; --plot-dim:#8494a1; --plot-grid:rgba(199,212,222,.13); --plot-axis:rgba(199,212,222,.45);
   --f-display:"Saira Semi Condensed","Arial Narrow",sans-serif;
   --f-body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
-  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --f-mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0a1016; --surface:#111a22; --sunk:#0d151c; --ink:#e1e8ee; --muted:#8c9daa; --line:#22313d;
-  --accent:#f0a43a; --accent-ink:#1b1206; --accent-soft:#3a2a12;
+  --bg:#0b1117; --surface:#121b23; --sunk:#0c141b; --ink:#e3e9ee; --muted:#93a3af; --line:#25343f; --line-soft:#1b2832;
+  --accent:#f0a43a; --accent-ink:#1b1206; --accent-soft:#33260f;
   --pass:#4cc27a; --fail:#ff6b5d; --info:#8c9daa; color-scheme:dark;}}
 :root[data-theme="dark"]{
-  --bg:#0a1016; --surface:#111a22; --sunk:#0d151c; --ink:#e1e8ee; --muted:#8c9daa; --line:#22313d;
-  --accent:#f0a43a; --accent-ink:#1b1206; --accent-soft:#3a2a12;
+  --bg:#0b1117; --surface:#121b23; --sunk:#0c141b; --ink:#e3e9ee; --muted:#93a3af; --line:#25343f; --line-soft:#1b2832;
+  --accent:#f0a43a; --accent-ink:#1b1206; --accent-soft:#33260f;
   --pass:#4cc27a; --fail:#ff6b5d; --info:#8c9daa; color-scheme:dark;}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;
-  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
-.wrap{max-width:1380px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
-header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px;border-bottom:1px solid var(--line);padding-bottom:12px}
-h1{font-family:var(--f-display);font-weight:700;font-size:30px;letter-spacing:.01em;margin:0;line-height:1.05;text-wrap:balance}
-h1 span{color:var(--accent)}
-.brand{display:flex;align-items:center;gap:12px}
-.logo{width:46px;height:46px;flex:none}
-.sub{color:var(--muted);margin:4px 0 0;max-width:62ch}
-.reg{font-family:var(--f-mono);font-size:12px;color:var(--muted);text-align:right}
-.bench{display:grid;grid-template-columns:minmax(300px,360px) minmax(0,1fr);gap:18px;align-items:start}
-@media (max-width:900px){.bench{grid-template-columns:minmax(0,1fr)}}
-aside{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:14px;min-width:0}
-.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--sunk);border-radius:5px;padding:3px;gap:3px}
-.seg button{font:600 13px var(--f-body);border:0;border-radius:4px;padding:8px 6px;background:transparent;color:var(--muted);cursor:pointer}
-.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
-.lab{font:600 11px var(--f-display);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0}
-fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:9px;min-width:0}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
-label.f{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--muted);min-width:0}
-label.f small{font-size:11.5px;color:var(--muted);opacity:.85}
-input,select,textarea{font:14px var(--f-body);color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:7px 8px;width:100%;min-width:0}
-input[type=number]{font-family:var(--f-mono);font-size:13.5px}
-textarea{font:12px/1.45 var(--f-mono);resize:vertical;white-space:pre;overflow:auto;tab-size:2}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;font-variant-numeric:tabular-nums;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 40px}
+.wrap{max-width:1440px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header{padding:12px 14px;border-bottom:1px solid var(--line)}
+h1{font-family:var(--f-display);font-weight:700;font-size:22px;letter-spacing:.01em;margin:0;line-height:1}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:32px;height:32px;flex:none}
+.bench{display:grid;grid-template-columns:372px minmax(0,1fr);gap:20px;align-items:start}
+
+/* ---- control rail ---- */
+aside{background:var(--surface);border:1px solid var(--line);border-radius:10px;min-width:0;display:flex;flex-direction:column;
+  position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:hidden}
+.rail-body{position:relative;overflow-y:auto;overscroll-behavior:contain;padding:14px 14px 4px;display:flex;flex-direction:column;gap:14px;min-height:0}
+.rail-foot{border-top:1px solid var(--line);padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--surface)}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--sunk);border-radius:7px;padding:3px;gap:3px}
+.seg button{font:600 14px var(--f-body);border:0;border-radius:5px;padding:8px 6px;background:transparent;color:var(--muted);cursor:pointer}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;min-width:0}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13.5px;color:var(--muted);min-width:0}
+label.f small{font-size:12.5px;color:var(--muted)}
+input,select,textarea{font:15px var(--f-body);font-variant-numeric:tabular-nums;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:7px 9px;width:100%;min-width:0}
+input:hover,select:hover,textarea:hover{border-color:var(--muted)}
+input::placeholder,textarea::placeholder{color:var(--muted);opacity:.8}
+textarea{font:12px/1.5 var(--f-mono);resize:vertical;white-space:pre;overflow:auto;tab-size:2;background:var(--sunk)}
 input:disabled{opacity:.55}
 input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+code{font:12px var(--f-mono);background:var(--sunk);padding:0 3px;border-radius:3px}
 .btnrow{display:flex;flex-wrap:wrap;gap:6px}
-.btn{font:600 13px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:6px 10px;cursor:pointer}
+.btn{font:600 14px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:5px;padding:7px 12px;cursor:pointer}
 .btn:hover{border-color:var(--muted)}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.btn.primary:hover{filter:brightness(1.06)}
-.drop{display:flex;flex-direction:column;align-items:center;gap:2px;border:1.5px dashed var(--line);border-radius:5px;padding:12px 10px;cursor:pointer;background:var(--sunk);text-align:center}
+.btn.primary:hover{filter:brightness(1.08)}
+.drop{display:flex;flex-direction:column;align-items:center;gap:2px;border:1.5px dashed var(--line);border-radius:7px;padding:12px 10px;cursor:pointer;background:var(--sunk);text-align:center}
 .drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
 .drop:focus-within{outline:2px solid var(--accent);outline-offset:1px}
 .drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
-.drop-t{font-weight:600;font-size:14px;color:var(--ink)}
-.drop-s{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.drop-t{font-weight:600;font-size:14.5px;color:var(--ink)}
+.drop-s{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
 .drop-s.err{color:var(--fail)}
-.sval{font:600 13px var(--f-mono);color:var(--ink);margin-left:4px}
-input[type=range]{padding:0;background:transparent;border:0;accent-color:var(--accent);height:24px}
+.qhead{display:flex;justify-content:space-between;align-items:baseline}
+.sval{font:600 15px var(--f-body);color:var(--ink)}
+input[type=range]{padding:0;background:transparent;border:0;accent-color:var(--accent);height:26px}
 .srow{display:flex;justify-content:space-between}
-.radios{display:flex;flex-direction:column;gap:6px}
-.rad{display:flex;gap:9px;align-items:flex-start;padding:7px 9px;border:1px solid var(--line);border-radius:5px;background:var(--sunk);cursor:pointer}
-.rad input{width:auto;margin:2px 0 0;accent-color:var(--accent)}
-.rad span{display:flex;flex-direction:column;gap:1px;min-width:0}
+.note{font-size:13px;line-height:1.45;color:var(--muted);margin:0;max-width:68ch}
+
+/* collapsible setting groups: the header carries the current values, so a closed group still tells you its state */
+.secs{display:flex;flex-direction:column;border-top:1px solid var(--line-soft)}
+details.sec{border-bottom:1px solid var(--line-soft)}
+details.sec>summary{list-style:none;display:flex;align-items:baseline;gap:10px;padding:10px 2px 10px 18px;cursor:pointer;position:relative;user-select:none}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary::before{content:"";position:absolute;left:3px;top:50%;width:6px;height:6px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:translateY(-70%) rotate(-45deg);transition:transform .15s}
+details.sec[open]>summary::before{transform:translateY(-85%) rotate(45deg)}
+details.sec>summary:hover .st{color:var(--accent)}
+.st{font-weight:600;font-size:14.5px;color:var(--ink);flex:none}
+.sv{font-size:13px;color:var(--muted);margin-left:auto;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+details.sec[open] .sv{visibility:hidden}
+.sb{display:flex;flex-direction:column;gap:10px;padding:2px 0 14px}
+#physBox:not([hidden]){display:flex;flex-direction:column;gap:10px}
+.chk{display:flex;align-items:center;gap:8px;font-size:14.5px;cursor:pointer}
+.chk input{width:17px;height:17px;accent-color:var(--accent);flex:none}
+.model{display:flex;flex-direction:column;gap:5px;font-size:13.5px;color:var(--muted)}
+.radios{display:grid;grid-template-columns:repeat(3,auto);background:var(--sunk);border-radius:7px;padding:3px;gap:3px}
+.rad{display:block;cursor:pointer;min-width:0}
+.rad input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.rad span{display:block;text-align:center;padding:7px 6px;border-radius:5px;color:var(--muted);white-space:nowrap}
 .rad b{font-size:13.5px;font-weight:600}
-.rad small{font:12px var(--f-mono);color:var(--muted)}
-.rad:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
-.rad:focus-within{outline:2px solid var(--accent);outline-offset:1px}
-.go{font:700 16px var(--f-display);letter-spacing:.04em;background:var(--accent);color:var(--accent-ink);border:0;border-radius:5px;padding:11px;cursor:pointer;width:100%}
-.go:disabled{opacity:.6;cursor:progress}
-.prog{height:4px;background:var(--sunk);border-radius:2px;overflow:hidden}
+.rad:hover span{color:var(--ink)}
+.rad:has(input:checked) span{background:var(--surface);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+.rad:has(input:focus-visible) span{outline:2px solid var(--accent);outline-offset:1px}
+.go{font:700 17px var(--f-display);letter-spacing:.02em;background:var(--accent);color:var(--accent-ink);border:0;border-radius:7px;padding:11px;cursor:pointer;width:100%}
+.go:hover{filter:brightness(1.08)}
+.go:disabled{opacity:.6;cursor:progress;filter:none}
+.prog{height:3px;background:var(--sunk);border-radius:2px;overflow:hidden}
 .prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .1s}
-.msg{font-size:13px;color:var(--muted);min-height:1.2em}
-.msg.err{color:var(--fail)}
-details{border-top:1px solid var(--line);padding-top:10px}
-summary{cursor:pointer;font:600 12px var(--f-display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-details>div{margin-top:10px;display:flex;flex-direction:column;gap:9px}
-.note{font-size:12.5px;color:var(--muted);margin:0}
-main{display:flex;flex-direction:column;gap:18px;min-width:0}
-.summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
-.kv{background:var(--surface);padding:10px 12px;min-width:0}
-.kv b{display:block;font:600 11px var(--f-display);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
-.kv span{font:500 18px var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
-.kv em{display:block;font-style:normal;font-size:12px;color:var(--muted)}
-.verdict span{font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:.03em}
-.ok{color:var(--pass)} .bad{color:var(--fail)}
-.screen{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden;min-width:0}
-.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 12px;border-bottom:1px solid var(--line)}
-.bar h2{font:700 17px var(--f-display);margin:0 auto 0 0;letter-spacing:.02em}
-.bar label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
-.bar select{width:auto;padding:4px 6px;font-size:13px}
-.bar input[type=checkbox]{width:auto}
+.msg{font-size:13.5px;color:var(--muted);margin:0;max-height:8.8em;overflow-y:auto}
+.msg:empty{display:none}
+.msg.err{color:var(--fail);font-weight:600}
+
+/* ---- results ---- */
+main{display:flex;flex-direction:column;gap:20px;min-width:0}
+.summary{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.summary.six{grid-template-columns:repeat(10,minmax(0,1fr))}
+.kv{grid-column:span 2;padding:11px 14px 12px;min-width:0;border-right:1px solid var(--line-soft);border-top:1px solid var(--line-soft);margin:-1px -1px 0 0}
+.kv b{display:block;font:400 13px var(--f-body);color:var(--muted)}
+.kv span{display:block;font:600 21px/1.25 var(--f-display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kv em{display:block;font-style:normal;font-size:12.5px;color:var(--muted);line-height:1.35;margin-top:1px}
+.kv.verdict{grid-column:span 4;padding:14px 16px 14px 20px;position:relative;border-bottom:1px solid var(--line)}
+.summary.six .kv.verdict{grid-column:span 5}
+.kv.verdict::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--info)}
+.kv.verdict.ok::before{background:var(--pass)} .kv.verdict.bad::before{background:var(--fail)}
+.kv.verdict span{font-size:27px;line-height:1.15}
+.kv.verdict.ok span{color:var(--pass)} .kv.verdict.bad span{color:var(--fail)}
+.screen{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.bar h2{font:600 18px var(--f-display);margin:0 auto 0 0;letter-spacing:.01em}
+.bar label{display:flex;align-items:center;gap:6px;font-size:13.5px;color:var(--muted)}
+.bar select{width:auto;padding:4px 6px;font-size:14px}
+.bar input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 .cv{position:relative;background:var(--plot-bg)}
 .cv canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
-.foot{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--plot-bg);color:var(--plot-ink);border-top:1px solid rgba(255,255,255,.06)}
-.readout{font:12.5px var(--f-mono);font-variant-numeric:tabular-nums;min-height:1.4em}
-.legend{display:flex;flex-wrap:wrap;gap:4px 10px;font:11.5px var(--f-mono);color:var(--plot-dim)}
+.foot{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;align-items:center;padding:8px 14px;background:var(--plot-bg);color:var(--plot-ink);border-top:1px solid rgba(255,255,255,.07)}
+.readout{font-size:13.5px;min-height:1.4em}
+.legend{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12.5px;color:var(--plot-dim)}
 .legend i{display:inline-block;width:12px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
-.tables{display:flex;flex-direction:column;gap:18px;min-width:0}
-details.fold{border-top:1px solid var(--line);padding-top:0}
-details.fold>div{margin-top:0;display:block}
-details.fold>summary{list-style:none;cursor:pointer;font:inherit;letter-spacing:normal;text-transform:none;color:inherit;user-select:none}
+.tables{display:flex;flex-direction:column;gap:20px;min-width:0}
+details.fold>summary{list-style:none;cursor:pointer;user-select:none}
 details.fold>summary::-webkit-details-marker{display:none}
 details.fold>summary h2{margin:0}
-details.fold>summary .note{margin-left:auto}
+details.fold>summary .note{margin-left:auto;text-align:right}
 details.fold:not([open])>summary{border-bottom:0}
-details.fold>summary:hover{background:var(--sunk)}
-.chev{width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s;flex:none}
+details.fold>summary:hover h2{color:var(--accent)}
+.chev{width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s;flex:none}
 details.fold:not([open]) .chev{transform:rotate(-45deg)}
-.cnt{font:700 11px var(--f-display);letter-spacing:.08em;padding:2px 7px;border-radius:3px;background:var(--sunk);color:var(--muted)}
-.cnt.p{background:color-mix(in srgb,var(--pass) 16%,transparent);color:var(--pass)}
-.cnt.f{background:color-mix(in srgb,var(--fail) 16%,transparent);color:var(--fail)}
-.summary.six{grid-template-columns:repeat(6,minmax(0,1fr))}
-#physBox:not([hidden]){display:flex;flex-direction:column;gap:9px}
-.chk{display:flex;align-items:center;gap:8px;font-size:14px;margin:2px 0 8px;cursor:pointer}.chk input{width:16px;height:16px;accent-color:var(--accent)}
-.blk{margin:0;padding:0;list-style:none}.blk li{padding:9px 14px;border-top:1px solid var(--line);font-size:14px}.blk li b{font-weight:600}.blk li span{color:var(--muted)}
-@media (max-width:1200px) and (min-width:641px){.summary,.summary.six{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media (max-width:640px){.summary,.summary.six{grid-template-columns:repeat(2,minmax(0,1fr))}.kv span{font-size:16px}}
+.cnt{font:600 13px var(--f-body);padding:2px 9px;border-radius:99px;background:var(--sunk);color:var(--muted)}
+.cnt:empty{display:none}
+.cnt.p{background:color-mix(in srgb,var(--pass) 14%,transparent);color:var(--pass)}
+.cnt.f{background:var(--fail);color:#fff}
+.blk{margin:0;padding:0;list-style:none}
+.blk li{padding:10px 14px;border-top:1px solid var(--line-soft);font-size:14.5px}.blk li:first-child{border-top:0}
+.blk li b{font-weight:600}.blk li span{color:var(--muted)}
 .tbl{overflow-x:auto}
-table{border-collapse:collapse;width:100%;font-size:13px}
-th{font:600 11px var(--f-display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
-td{padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums}
-td.n{font-family:var(--f-mono);font-size:12.5px;text-align:right}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{font:600 13px var(--f-body);color:var(--muted);text-align:left;padding:8px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+th.n{text-align:right}
+td{padding:6px 14px;border-bottom:1px solid var(--line-soft);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:color-mix(in srgb,var(--sunk) 55%,transparent)}
+td.n{text-align:right}
 td.id{font-weight:600}
-.pill{display:inline-block;font:700 11px var(--f-display);letter-spacing:.08em;padding:2px 7px;border-radius:3px}
-.pill.p{background:color-mix(in srgb,var(--pass) 16%,transparent);color:var(--pass)}
-.pill.f{background:color-mix(in srgb,var(--fail) 16%,transparent);color:var(--fail)}
-.pill.i{background:var(--sunk);color:var(--info)}
-.pill.a{background:color-mix(in srgb,var(--fail) 16%,transparent);color:var(--fail)}
-td.aim small{color:var(--muted);font-size:11px;margin-left:4px}
-tr.fail td{background:color-mix(in srgb,var(--fail) 6%,transparent)}
-.export{padding:12px;display:flex;flex-direction:column;gap:10px}
+td:last-child,th:last-child{text-align:right;width:1%}
+/* status: a pass is quiet, a fail is loud */
+.pill{display:inline-block;font:600 13px var(--f-body);border-radius:4px}
+.pill.p{color:var(--pass)}
+.pill.f,.pill.a{background:var(--fail);color:#fff;padding:1px 8px}
+.pill.i{color:var(--info);font-weight:400}
+td.aim small{color:var(--muted);font-size:12px;margin-left:4px}
+tr.fail td,tbody tr.fail:hover td{background:color-mix(in srgb,var(--fail) 8%,transparent)}
+tr.fail td.id{box-shadow:inset 3px 0 0 var(--fail)}
+.export{padding:14px;display:flex;flex-direction:column;gap:10px}
 .export textarea{height:150px}
-footer{color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding-top:10px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px}
+footer{color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:10px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px}
 footer a{color:inherit;text-decoration:underline;text-underline-offset:2px}
 footer a:hover{color:var(--ink)}
-@media (prefers-reduced-motion:reduce){.prog i{transition:none}.chev{transition:none}}
+
+@media (max-width:1180px){
+  .summary,.summary.six{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .kv{grid-column:span 1}.kv.verdict,.summary.six .kv.verdict{grid-column:span 2}
+}
+@media (max-width:900px){
+  .bench{grid-template-columns:minmax(0,1fr)}
+  aside{position:static;max-height:none;overflow:visible}
+  .rail-body{overflow:visible}
+  /* the Generate action stays reachable while the settings scroll past */
+  .rail-foot{position:sticky;bottom:0;border-radius:0 0 10px 10px;z-index:2;padding-bottom:max(12px,env(safe-area-inset-bottom,0px))}
+  .msg{max-height:5.9em}
+}
+@media (max-width:640px){
+  body{font-size:16px}
+  input,select,textarea,.bar select{font-size:16px}   /* 16 px keeps phone browsers from zooming into a focused field */
+  textarea{font-size:12px}
+  .summary,.summary.six{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kv.verdict,.summary.six .kv.verdict{grid-column:span 2}
+  .kv span{font-size:19px}.kv.verdict span{font-size:24px}
+  details.fold>summary .note{margin-left:0;text-align:left;flex-basis:100%}
+  td,th{padding-inline:10px}
+}
+@media (prefers-reduced-motion:reduce){.prog i,.chev,details.sec>summary::before{transition:none}}
 </style>
 </head>
 <body>
 
 
 <div class="wrap">
-<header>
+<div class="bench">
+<aside aria-label="Beam settings">
+  <header>
   <div class="brand">
     <svg class="logo" viewBox="0 0 48 48" aria-hidden="true">
   <defs><clipPath id="lbClip"><path d="M3 25 H22 L31 18 H45 V44 H3 Z"/></clipPath></defs>
@@ -172,14 +226,11 @@ footer a:hover{color:var(--ink)}
     <circle r="2" fill="var(--plot-bg)"/>
   </g>
 </svg>
-    <h1>Beam <span>Synth</span></h1>
+    <h1>Beam Synth</h1>
   </div>
-</header>
-
-<div class="bench">
-<aside>
+  </header>
+  <div class="rail-body">
   <fieldset id="beamPanel">
-    <p class="lab">Beam</p>
     <div class="row2">
       <label class="f">Beam function
         <select id="fn"><option value="low">Low beam</option><option value="high">High beam</option></select>
@@ -194,7 +245,6 @@ footer a:hover{color:var(--ink)}
   </div>
 
   <fieldset id="paramPanel">
-    <p class="lab">Beam parameters</p>
     <div class="row2">
       <label class="f">Maximum intensity (cd)<input id="imax" type="number" step="500" value="30000"></label>
       <label class="f">Luminous flux (lm)<input id="flux" type="number" step="10" value="800"></label>
@@ -207,7 +257,7 @@ footer a:hover{color:var(--ink)}
       <label class="f">Hot spot H (°)<input id="hotH" type="number" step="0.05" value="1.15"><small>+ right, − left</small></label>
       <label class="f">Hot spot V (°)<input id="hotV" type="number" step="0.01" value="-0.57"><small>+ up, − down</small></label>
     </div>
-    <label class="f">Q factor <span class="sval" id="smileVal">0.70</span>
+    <label class="f"><span class="qhead">Q factor <span class="sval" id="smileVal">0.70</span></span>
       <input id="smile" type="range" min="0" max="1" step="0.05" value="0.7">
       <small class="srow"><span>0 · “+” shape</span><span>1 · strong smile</span></small>
     </label>
@@ -215,7 +265,6 @@ footer a:hover{color:var(--ink)}
   </fieldset>
 
   <fieldset id="roadPanel" hidden>
-    <p class="lab">Road requirement (JSON)</p>
     <label class="drop" id="drop" for="jsonFile">
       <input type="file" id="jsonFile" accept=".json,application/json,text/plain">
       <span class="drop-t">Upload JSON file</span>
@@ -229,8 +278,10 @@ footer a:hover{color:var(--ink)}
     <p class="note">Paste a road-illuminate requirement set as is, or wrap it as <code>"checks"</code> with vehicle settings. Check types: <code>point</code>, <code>range</code>, <code>width</code>, <code>zone</code>, with <code>op</code> and <code>limit</code>; <code>y</code> is positive to the left, as in road-illuminate. Optional <code>z</code> per check sets its evaluation height. Optional <code>class</code> (<code>B</code>, <code>CS</code>, <code>DS</code>, <code>ES</code>; driving beam <code>BS</code>, <code>DSES</code>). Optional <code>targets</code>: <code>imax</code>, <code>flux_lm</code>, <code>spreadH_deg</code>, <code>spreadV_deg</code>. Optional <code>roadFlux</code>: <code>target_lm</code>, <code>lamps</code> (<code>one</code> or <code>pair</code>), <code>zone</code> {<code>x1</code>, <code>x2</code>, <code>left</code>, <code>right</code>}.</p>
   </fieldset>
 
-  <fieldset>
-    <p class="lab">Vehicle</p>
+  <div class="secs">
+  <details class="sec">
+    <summary><span class="st">Vehicle</span><span class="sv" id="svVeh"></span></summary>
+    <div class="sb">
     <div class="row2">
       <label class="f">Traffic<select id="traffic"><option value="RHT">Right-hand (RHT)</option><option value="LHT">Left-hand (LHT)</option></select></label>
       <label class="f">Mounting height (m)<input id="mh" type="number" step="0.01" value="0.65"></label>
@@ -239,10 +290,12 @@ footer a:hover{color:var(--ink)}
       <label class="f">Lamp spacing (m)<input id="sp" type="number" step="0.05" value="1.4"></label>
       <label class="f">Evaluation height (m)<input id="evalH" type="number" step="0.05" min="0" value="0"></label>
     </div>
-  </fieldset>
+    </div>
+  </details>
 
-  <fieldset>
-    <p class="lab">Physical limits</p>
+  <details class="sec">
+    <summary><span class="st">Physical limits</span><span class="sv" id="svPhys"></span></summary>
+    <div class="sb">
     <label class="chk"><input id="physOn" type="checkbox"> Apply physical limits</label>
     <div id="physBox" hidden>
     <div class="row2">
@@ -255,19 +308,23 @@ footer a:hover{color:var(--ink)}
     </div>
     <p class="note">With an aperture given, Imax is held at or below LED luminance × aperture area, the most any optic can deliver. Efficiency converts the emitted flux into the LED flux needed. Leave the aperture blank for no limit.</p>
     </div>
-  </fieldset>
+    </div>
+  </details>
 
-  <fieldset>
-    <p class="lab">Aim tolerance</p>
+  <details class="sec">
+    <summary><span class="st">Aim tolerance</span><span class="sv" id="svAim"></span></summary>
+    <div class="sb">
     <div class="row2">
       <label class="f">Vertical (±°)<input id="aimV" type="number" step="0.05" min="0" max="1" value="0"></label>
       <label class="f">Horizontal (±°)<input id="aimH" type="number" step="0.05" min="0" max="2" value="0"></label>
     </div>
     <p class="note">At 0 the beam is solved for nominal aim only. Set a tolerance and the beam must pass ECE with the lamp mis-aimed anywhere in that box. A Class B beam can pass up to ±0.4° H with ±0.2° V; beyond that the cut-off shoulder reaches the 75R point.</p>
-  </fieldset>
+    </div>
+  </details>
 
-  <fieldset>
-    <p class="lab">Flux on road</p>
+  <details class="sec">
+    <summary><span class="st">Flux on road</span><span class="sv" id="svRf"></span></summary>
+    <div class="sb">
     <div class="row2">
       <label class="f">Minimum (lm)<input id="rfT" type="number" step="10" min="0" value="" placeholder="none"><small>blank = no minimum</small></label>
       <label class="f">Evaluate for<select id="rfL"><option value="one">One lamp</option><option value="pair">Lamp pair</option></select></label>
@@ -281,11 +338,12 @@ footer a:hover{color:var(--ink)}
       <label class="f">Width right (m)<input id="rfYR" type="number" step="0.5" min="0" value="10"></label>
     </div>
     <p class="note">Luminous flux reaching the road surface inside this rectangle, measured from the lamps. Leave the minimum blank to get the least flux that meets the requirements; set it only when a minimum flux on road is required.</p>
-  </fieldset>
+    </div>
+  </details>
 
-  <details id="cutBox">
-    <summary>Cut-off geometry (low beam)</summary>
-    <div>
+  <details class="sec" id="cutBox">
+    <summary><span class="st">Cut-off geometry (low beam)</span><span class="sv" id="svCut"></span></summary>
+    <div class="sb">
       <div class="row2">
         <label class="f">Elbow V (°)<input id="cElbow" type="number" step="0.01" value="-0.57"></label>
         <label class="f">Shoulder angle (°)<input id="cAngle" type="number" step="1" value="15"></label>
@@ -298,9 +356,9 @@ footer a:hover{color:var(--ink)}
     </div>
   </details>
 
-  <details>
-    <summary>Regulation test table</summary>
-    <div>
+  <details class="sec">
+    <summary><span class="st">Regulation test table</span><span class="sv" id="svTbl"></span></summary>
+    <div class="sb">
       <p class="note" id="tableNote"></p>
       <textarea id="tableJson" rows="14" spellcheck="false" aria-label="Regulation test table JSON"></textarea>
       <div class="btnrow"><button class="btn" id="tableReset">Reset to preset</button></div>
@@ -308,18 +366,23 @@ footer a:hover{color:var(--ink)}
     </div>
   </details>
 
-  <fieldset>
-    <p class="lab">Beam model</p>
-    <div class="radios" role="radiogroup" aria-label="Beam model">
+  </div>
+
+  <div class="model">
+    <span id="modelLab">Beam model</span>
+    <div class="radios" role="radiogroup" aria-labelledby="modelLab">
       <label class="rad"><input type="radio" name="model" value="hybrid" checked><span><b>Hybrid</b></span></label>
       <label class="rad"><input type="radio" name="model" value="sqrt"><span><b>Smooth √ fall-off</b></span></label>
       <label class="rad"><input type="radio" name="model" value="lobes"><span><b>Lobes</b></span></label>
     </div>
-  </fieldset>
+  </div>
+  </div>
 
-  <button class="go" id="go">Generate beam</button>
-  <div class="prog" aria-hidden="true"><i id="progBar"></i></div>
-  <p class="msg" id="msg"></p>
+  <div class="rail-foot">
+    <button class="go" id="go">Generate beam</button>
+    <div class="prog" aria-hidden="true"><i id="progBar"></i></div>
+    <p class="msg" id="msg" role="status"></p>
+  </div>
 </aside>
 
 <main>
@@ -1699,8 +1762,8 @@ function compactJSON(o) {
 }
 // classes per beam function; key = PRESET_TABLES entry
 const CLASSES = {
-  low: [["B", "B — asymmetric", "low"], ["CS", "CS — symmetric", "low_CS"], ["DS", "DS — symmetric", "low_DS"], ["ES", "ES — symmetric", "low_ES"]],
-  high: [["B", "With Class B (asym.)", "high"], ["BS", "BS — symmetric", "high_BS"], ["CS", "CS — symmetric", "high_CS"], ["DSES", "DS / ES — symmetric", "high_DSES"]]
+  low: [["B", "B (asymmetric)", "low"], ["CS", "CS (symmetric)", "low_CS"], ["DS", "DS (symmetric)", "low_DS"], ["ES", "ES (symmetric)", "low_ES"]],
+  high: [["B", "With Class B (asym.)", "high"], ["BS", "BS (symmetric)", "high_BS"], ["CS", "CS (symmetric)", "high_CS"], ["DSES", "DS / ES (symmetric)", "high_DSES"]]
 };
 const tableKey = () => (CLASSES[S.beam].find(c => c[0] === $("cls").value) || CLASSES[S.beam][0])[2];
 const isSym = () => S.beam === "low" && $("cls").value !== "B";
@@ -1906,7 +1969,8 @@ function generate() {
     const leftTxt = c.leftOut && S.res.roadRows.some(r => r.pass === false && r.id === c.leftOut) ? ` Left out: “${c.leftOut}”, which conflicts with the other checks.` : "";
     msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s${loopsTxt}. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : S.res.aimFailCount ? `ECE passes at nominal aim, but ${S.res.aimFailCount} check${S.res.aimFailCount > 1 ? "s fail" : " fails"} inside the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : S.res.aim ? `All ECE checks pass across the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : "All ECE checks pass.") + (c.mode !== "road" ? "" : nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : " All road checks pass.") + leftTxt + prefTxt + rfTxt + physTxt, nf > 0 || S.res.aimFailCount > 0);
     $("iesOut").value = "";
-    renderAll();
+    $("progBar").style.width = "0";
+    renderAll(); showResults();
   };
   setTimeout(tick, 20);
 }
@@ -2001,7 +2065,7 @@ function drawIso() {
   drawField(g, box, vals, nx, ny, lv, colors);
   const X = hh => box.x + (hh - view.h0) / (view.h1 - view.h0) * box.w, Y = vv => box.y + (view.v1 - vv) / (view.v1 - view.v0) * box.h;
   // grid + axes
-  g.font = "11px " + css("--f-mono"); g.fillStyle = css("--plot-dim"); g.textAlign = "center";
+  g.font = "11px " + css("--f-body"); g.fillStyle = css("--plot-dim"); g.textAlign = "center";
   const hs = view.h1 > 40 ? 10 : 5, vs = (view.v1 - view.v0) > 16 ? 4 : 2;
   for (let a = Math.ceil(view.h0 / hs) * hs; a <= view.h1; a += hs) { g.strokeStyle = a === 0 ? css("--plot-axis") : css("--plot-grid"); g.beginPath(); g.moveTo(X(a) + .5, box.y); g.lineTo(X(a) + .5, box.y + box.h); g.stroke(); g.fillText(a === 0 ? "V" : Math.abs(a) + (a < 0 ? "L" : "R"), X(a), h - 8); }
   g.textAlign = "right";
@@ -2020,13 +2084,13 @@ function drawIso() {
       if (e.line) {
         g.beginPath(); g.moveTo(X(mir * e.line[0][0]), Y(e.line[0][1])); g.lineTo(X(mir * e.line[1][0]), Y(e.line[1][1]));
         g.strokeStyle = status[e.id] === false ? fail : "rgba(255,255,255,.55)"; g.setLineDash([2, 3]); g.lineWidth = 1.4; g.stroke(); g.setLineDash([]); g.lineWidth = 1;
-        g.fillStyle = "rgba(255,255,255,.7)"; g.textAlign = "left"; g.font = "10px " + css("--f-mono");
+        g.fillStyle = "rgba(255,255,255,.7)"; g.textAlign = "left"; g.font = "10px " + css("--f-body");
         g.fillText(e.id, X(mir * Math.max(e.line[0][0], e.line[1][0])) + 4, Y(e.line[1][1]) + 3);
       }
       if (e.zone) {
         g.beginPath(); e.zone.forEach((p, i) => i ? g.lineTo(X(mir * p[0]), Y(p[1])) : g.moveTo(X(mir * p[0]), Y(p[1]))); g.closePath();
         g.strokeStyle = status[e.id] === false ? fail : "rgba(255,255,255,.35)"; g.setLineDash([2, 3]); g.stroke(); g.setLineDash([]);
-        g.fillStyle = "rgba(255,255,255,.6)"; g.textAlign = "left"; g.font = "10px " + css("--f-mono");
+        g.fillStyle = "rgba(255,255,255,.6)"; g.textAlign = "left"; g.font = "10px " + css("--f-body");
         const p0 = e.zone[0]; g.fillText(e.id, X(mir * p0[0]) + (mir > 0 ? 3 : -40), Y(p0[1]) - 3);
       }
     });
@@ -2035,7 +2099,7 @@ function drawIso() {
       const st = status[e.id], x = X(mir * e.h), y = Y(e.v);
       g.beginPath(); g.arc(x, y, 3.5, 0, 7);
       g.fillStyle = st === false ? fail : st === true ? pass : "#9fb0bd"; g.fill(); g.strokeStyle = "#0d151d"; g.lineWidth = 1; g.stroke();
-      g.fillStyle = "#e6eef4"; g.font = "10px " + css("--f-mono"); g.textAlign = "left"; g.fillText(e.id, x + 5, y - 4);
+      g.fillStyle = "#e6eef4"; g.font = "10px " + css("--f-body"); g.textAlign = "left"; g.fillText(e.id, x + 5, y - 4);
     });
   }
   // hot spot
@@ -2064,7 +2128,7 @@ function drawRoad() {
   for (let j = 0; j < ny; j++) { const y = view.y0 + j * (view.y1 - view.y0) / (ny - 1); for (let i = 0; i < nx; i++) { const x = Math.max(0.5, view.x0 + i * (view.x1 - view.x0) / (nx - 1)); vals[j * nx + i] = luxDisp(x, y); } }
   drawField(g, box, vals, nx, ny, lv, colors);
   const X = x => box.x + (x - view.x0) / (view.x1 - view.x0) * box.w, Y = y => box.y + (y - view.y0) / (view.y1 - view.y0) * box.h;
-  g.font = "11px " + css("--f-mono"); g.fillStyle = css("--plot-dim"); g.textAlign = "center";
+  g.font = "11px " + css("--f-body"); g.fillStyle = css("--plot-dim"); g.textAlign = "center";
   const xs = view.x1 > 200 ? 50 : 25;
   for (let a = 0; a <= view.x1; a += xs) { g.strokeStyle = css("--plot-grid"); g.beginPath(); g.moveTo(X(a) + .5, box.y); g.lineTo(X(a) + .5, box.y + box.h); g.stroke(); g.fillText(a + (a === view.x1 - (view.x1 % xs) ? " m" : ""), X(a), h - 8); }
   g.textAlign = "right";
@@ -2134,15 +2198,15 @@ hookRead($("isoCv"), "iso"); hookRead($("roadCv"), "road");
 // ---------- summary + tables ----------
 function kv(label, value, sub, cls) { return `<div class="kv ${cls || ""}"><b>${label}</b><span>${value}</span>${sub ? `<em>${sub}</em>` : ""}</div>`; }
 function req(r, unit) { const p = []; if (r.min != null) p.push("≥ " + (unit === "lx" ? fmt(r.min, 2) : fmtCd(r.min))); if (r.max != null) p.push("≤ " + (unit === "lx" ? fmt(r.max, 2) : fmtCd(r.max))); return p.join(", ") || "info"; }
-function pillRoad(r) { return r.pass === false && S.cfg && S.cfg.leftOut === r.id ? '<span class="pill i" title="Left out: it conflicts with the other checks">LEFT OUT</span>' : pill(r.pass); }
-function pill(p) { return p === true ? '<span class="pill p">PASS</span>' : p === false ? '<span class="pill f">FAIL</span>' : '<span class="pill i">INFO</span>'; }
+function pillRoad(r) { return r.pass === false && S.cfg && S.cfg.leftOut === r.id ? '<span class="pill i" title="Left out: it conflicts with the other checks">Left out</span>' : pill(r.pass); }
+function pill(p) { return p === true ? '<span class="pill p">Pass</span>' : p === false ? '<span class="pill f">Fail</span>' : '<span class="pill i">Info</span>'; }
 
 // what the beam asks of the light source and the aperture
 function physTiles(p) {
   if (!p) return "";
-  const led = p && p.ledFlux ? kv("LED flux", fmt(p.ledFlux) + " lm", `at ${fmt(p.eff * 100)} % efficiency` + (p.minEmit ? ` · emitting area ≥ ${fmt(p.minEmit, 1)} mm²` : "")) : kv("LED flux", "—", "set the optical efficiency");
+  const led = p && p.ledFlux ? kv("LED flux", fmt(p.ledFlux) + " lm", `at ${fmt(p.eff * 100)} % efficiency` + (p.minEmit ? `, emitting area ≥ ${fmt(p.minEmit, 1)} mm²` : "")) : kv("LED flux", "—", "set the optical efficiency");
   const ap = !p || !p.lum ? kv("Min aperture", "—", "set the LED luminance")
-    : p.imaxCap ? kv("Imax limit", fmt(p.imaxCap) + " cd", `${fmt(p.lum)} Mcd/m² × ${fmt(p.area)} mm² · ${fmt(100 * p.apertureUsed)} % used`)
+    : p.imaxCap ? kv("Imax limit", fmt(p.imaxCap) + " cd", `${fmt(p.lum)} Mcd/m² × ${fmt(p.area)} mm², ${fmt(100 * p.apertureUsed)} % used`)
     : kv("Min aperture", fmt(p.minAperture) + " mm²", `lit area needed for Imax at ${fmt(p.lum)} Mcd/m²`);
   return led + ap;
 }
@@ -2154,12 +2218,12 @@ function renderSummary() {
   const r1 = reach(1), r3 = reach(3);
   $("summary").classList.toggle("six", !!r.phys);
   $("summary").innerHTML =
-    kv("ECE verdict", nf ? `${nf} of ${n} fail` : r.aimFailCount ? `${r.aimFailCount} fail in aim box` : `PASS ${n}/${n}`, (r.aim && !nf && !r.aimFailCount ? `aim ±${fmt(r.aim.v, 2)}° V, ±${fmt(r.aim.h, 2)}° H · ` : "") + `Class ${c.cls === "DSES" ? "DS / ES" : c.cls} ${c.beam === "low" ? "passing" : "driving"} beam`, "verdict " + (nf || r.aimFailCount ? "bad" : "ok")) +
-    kv("Road checks", nrt ? (r.phys ? `met ${nrt - nr}/${nrt}` : nr ? `${nr} of ${nrt} missed` : `met ${nrt}/${nrt}`) : "none", c.mode === "road" ? "solved for" : "checked only", "verdict " + (nr ? "bad" : "ok")) +
+    kv("ECE verdict", nf ? `${nf} of ${n} fail` : r.aimFailCount ? `${r.aimFailCount} fail in aim box` : `Pass ${n}/${n}`, (r.aim && !nf && !r.aimFailCount ? `aim ±${fmt(r.aim.v, 2)}° V, ±${fmt(r.aim.h, 2)}° H, ` : "") + `Class ${c.cls === "DSES" ? "DS / ES" : c.cls} ${c.beam === "low" ? "passing" : "driving"} beam`, "verdict " + (nf || r.aimFailCount ? "bad" : "ok")) +
+    kv("Road checks", nrt ? (r.phys ? `Met ${nrt - nr}/${nrt}` : nr ? `${nr} of ${nrt} missed` : `Met ${nrt}/${nrt}`) : "none", c.mode === "road" ? "solved for" : "checked only", "verdict " + (!nrt ? "" : !nr ? "ok" : c.mode === "road" ? "bad" : "")) +
     kv("Imax", fmt(r.imax) + " cd", asked(t.imax, 0, " cd")) +
     kv("Flux", fmt(r.flux) + " lm", asked(t.flux, 0, " lm") || "emitted, one lamp") +
     physTiles(r.phys) +
-    kv("Flux on road", r.roadFlux == null ? "—" : fmt(r.roadFlux) + " lm", (r.roadFluxTarget ? `minimum ${fmt(r.roadFluxTarget)} lm · ` : "") + (c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair")) +
+    kv("Flux on road", r.roadFlux == null ? "—" : fmt(r.roadFlux) + " lm", (r.roadFluxTarget ? `minimum ${fmt(r.roadFluxTarget)} lm, ` : "") + (c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair")) +
     kv("Road share", r.roadFlux == null || !r.flux ? "—" : fmt(100 * r.roadFlux / (r.flux * (c.roadFlux.lamps === "one" ? 1 : 2))) + " %", `of emitted flux, ${fmt(c.roadFlux.zone.x1)}–${fmt(c.roadFlux.zone.x2)} m, ${fmt(c.roadFlux.zone.left, 1)} L / ${fmt(c.roadFlux.zone.right, 1)} R`) +
     kv("H spread", "±" + fmt(r.sp.spreadH, 1) + "°", asked(t.spreadH, 1, "°") || `${angH(mir < 0 ? -r.sp.right : r.sp.left)} … ${angH(mir < 0 ? -r.sp.left : r.sp.right)}`) +
     kv("V spread", fmt(r.sp.spreadV, 1) + "°", asked(t.spreadV, 1, "°")) +
@@ -2173,8 +2237,8 @@ function renderTables() {
   $("tblName").textContent = PRESET_TABLES[S.cfg.key].name + " · values in cd";
   const hasAim = !!S.res.aim;
   const aimCell = r => !hasAim ? "" : r.aimMargin == null ? '<td class="n aim"></td>' : `<td class="n aim">${fmt(100 * r.aimMargin, 0)} %${r.aimAt && (r.aimAt[0] || r.aimAt[1]) ? `<small>${angH(mir * r.aimAt[0])} ${angV(r.aimAt[1])}</small>` : ""}</td>`;
-  const pillEce = r => r.pass !== false && r.aimPass === false ? '<span class="pill a" title="Passes at nominal aim, fails inside the aim box">AIM</span>' : pill(r.pass);
-  $("ecTbl").innerHTML = `<thead><tr><th>Point</th><th>Position</th><th>Requirement</th><th>Value</th><th>Margin</th>${hasAim ? "<th>Worst in aim box</th>" : ""}<th></th></tr></thead><tbody>` +
+  const pillEce = r => r.pass !== false && r.aimPass === false ? '<span class="pill a" title="Passes at nominal aim, fails inside the aim box">Aim</span>' : pill(r.pass);
+  $("ecTbl").innerHTML = `<thead><tr><th>Point</th><th>Position</th><th class="n">Requirement</th><th class="n">Value</th><th class="n">Margin</th>${hasAim ? '<th class="n">Worst in aim box</th>' : ""}<th>Result</th></tr></thead><tbody>` +
     S.res.rows.map(r => {
       if (r.kind === "G") return `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>scan at ${r.where}</td><td class="n">${r.max == null ? "≥ " + fmt(r.min, 2) : fmt(r.min, 2) + " to " + fmt(r.max, 2)}</td><td class="n">${fmt(r.val, 3)}</td><td class="n">${fmt(100 * r.margin, 0)} %</td>${hasAim ? '<td class="n aim"></td>' : ""}<td>${pill(r.pass)}</td></tr>`;
       if (r.kind === "cutpos") return `<tr><td class="id">${r.id}</td><td>scan at ${r.where}</td><td class="n">${angV(r.target)}</td><td class="n">${angV(r.val)}</td><td class="n"></td>${hasAim ? '<td class="n aim"></td>' : ""}<td>${pill(null)}</td></tr>`;
@@ -2190,7 +2254,7 @@ function renderTables() {
     : `${fmt(c.x1)}–${fmt(c.x2)} m, ${fmt(Math.abs(c.y1), 2)}${c.y1 >= 0 ? "R" : "L"}–${fmt(Math.abs(c.y2), 2)}${c.y2 >= 0 ? "R" : "L"}, ${c.stat}`;
   const vfmt = r => r.unit === "m" ? (r.check.type === "range" && r.reach == null ? "not reached" : fmt(r.val, 1) + " m") : fmt(r.val, 2) + " lx";
   const rq = r => (r.min != null ? "≥ " + fmt(r.min, r.unit === "m" ? 0 : 2) : "≤ " + fmt(r.max, r.unit === "m" ? 0 : 2)) + " " + r.unit;
-  $("rdTbl").innerHTML = S.res.roadRows.length ? "<thead><tr><th>Check</th><th>Type</th><th>Where</th><th>Requirement</th><th>Value</th><th></th></tr></thead><tbody>" +
+  $("rdTbl").innerHTML = S.res.roadRows.length ? "<thead><tr><th>Check</th><th>Type</th><th>Where</th><th class='n'>Requirement</th><th class='n'>Value</th><th>Result</th></tr></thead><tbody>" +
     S.res.roadRows.map(r => `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>${r.check.type}</td><td>${where(r.check)}${r.check.zEval ? `, z ${fmt(r.check.zEval, 2)} m` : ""}</td><td class="n">${rq(r)}</td><td class="n">${vfmt(r)}</td><td>${pillRoad(r)}</td></tr>`).join("") + "</tbody>"
     : `<tbody><tr><td class="note" style="white-space:normal">No road checks for this beam function. Switch to Road requirement mode or paste a requirement set.</td></tr></tbody>`;
 }
@@ -2199,8 +2263,9 @@ function setCount(id, rows) {
   const el = $(id), n = rows.filter(r => r.pass != null).length;
   const lo = id === "rdCount" && S.cfg && S.cfg.leftOut && rows.some(r => r.pass === false && r.id === S.cfg.leftOut) ? 1 : 0;
   const f = rows.filter(r => r.pass === false).length - lo, fa = id === "ecCount" ? rows.filter(r => r.pass !== false && r.aimPass === false).length : 0;
-  el.textContent = !n ? "" : f ? `${f} OF ${n} FAIL` : fa ? `${fa} OF ${n} FAIL IN AIM BOX` : lo ? `${n - 1} OF ${n} PASS · 1 LEFT OUT` : `ALL ${n} PASS`;
-  el.className = "cnt" + (!n ? "" : f || fa ? " f" : " p");
+  el.textContent = !n ? "" : f ? `${f} of ${n} fail` : fa ? `${fa} of ${n} fail in aim box` : lo ? `${n - 1} of ${n} pass, 1 left out` : `All ${n} pass`;
+  const quiet = id === "rdCount" && S.cfg && S.cfg.mode !== "road";   // road checks that were only checked, not solved for
+  el.className = "cnt" + (!n ? "" : f || fa ? (quiet ? "" : " f") : " p");
 }
 
 function recomputeRoad() {
@@ -2323,8 +2388,30 @@ $("paramCopy").onclick = () => {
   el.addEventListener("toggle", () => { try { localStorage.setItem(key, el.open ? "open" : "closed"); } catch (e) { } });
 });
 
+// ---------- setting groups: show the current values in each group's header ----------
+function updateSecs() {
+  const v = id => $(id).value.trim(), n = id => parseFloat($(id).value), set = (id, t) => { if ($(id)) $(id).textContent = t; };
+  set("svVeh", `${v("traffic")}, ${v("mh") || "?"} m high, ${v("sp") || "?"} m apart` + (n("evalH") > 0 ? `, read at ${v("evalH")} m` : ""));
+  set("svPhys", !$("physOn").checked ? "Off" : n("apW") > 0 && n("apH") > 0 ? `${v("apW")} × ${v("apH")} mm, ${v("ledL")} Mcd/m²` : `No aperture limit, ${v("eff") || "?"} % efficiency`);
+  set("svAim", n("aimV") > 0 || n("aimH") > 0 ? `±${n("aimV") || 0}° V, ±${n("aimH") || 0}° H` : "Nominal aim only");
+  set("svRf", (n("rfT") > 0 ? `Minimum ${v("rfT")} lm` : "No minimum") + `, ${v("rfX1") || 0}–${v("rfX2") || "?"} m`);
+  set("svCut", `G ${v("cG") || "?"}, elbow ${v("cElbow") || "?"}°`);
+  let preset = true; try { preset = v("tableJson") === String(tableFor(tableKey())).trim(); } catch (e) { }
+  set("svTbl", preset ? "Preset" : "Edited");
+}
+document.querySelector("aside").addEventListener("input", updateSecs);
+document.querySelector("aside").addEventListener("change", () => setTimeout(updateSecs, 0));
+document.querySelector("aside").addEventListener("click", () => setTimeout(updateSecs, 0));
+// on a narrow screen the results sit below the settings: bring them into view after a run the user started
+$("go").addEventListener("click", () => { S.userRun = true; }, true);
+function showResults() {
+  if (!S.userRun) return; S.userRun = false;
+  if (matchMedia("(max-width:900px)").matches) $("summary").scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth" });
+}
+
 // ---------- start ----------
 fillClasses("B"); syncCut(); showTable(); setRoadFluxDefault(); setHotDefault();
+updateSecs();
 setTimeout(generate, 50);
 })();
 
