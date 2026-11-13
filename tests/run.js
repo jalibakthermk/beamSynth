@@ -105,6 +105,16 @@ t("physical limits: Imax stays at or below LED luminance x aperture, and the LED
   ok(!free.rows.some(x => x.kind === "phys") && free.phys == null, "physical limits must be off unless asked for");
   return out.join(", ") + ` of ${cap} cd`;
 });
+t("blocking checks are named: aperture limit, ECE Imax maximum, and nothing when every target is met", () => {
+  ok(base.out.res.blocking.length === 0, "default beam reports a blocked target: " + base.out.res.blocking.map(m => m.what).join(", "));
+  const ap = solve({ beam: "low", cls: "B", mode: "param", physical: { apW: 20, apH: 15, lum: 70, eff: 0.45 } }).out.res.blocking.find(m => m.what === "Imax");
+  ok(ap && ap.by[0] && ap.by[0].key === "phys", "Imax under a small aperture is not attributed to the aperture limit");
+  const hb = solve({ beam: "high", cls: "B", mode: "param", targets: { imax: 300000 } }).out.res.blocking.find(m => m.what === "Imax");
+  ok(hb && hb.by[0] && hb.by[0].key === "ece|Imax", "300 000 cd high beam is not attributed to the ECE Imax maximum: " + JSON.stringify(hb && hb.by));
+  const small = solve({ beam: "high", cls: "B", mode: "param", physical: { apW: 20, apH: 15, lum: 70, eff: 0.45 } }).out.res.blocking.find(m => m.what === "ECE Imax");
+  ok(small && small.by[0] && small.by[0].key === "phys", "failed ECE Imax minimum is not attributed to the aperture limit");
+  return "aperture limit, ECE Imax";
+});
 t("road-illuminate format round-trips", () => {
   const a = C.normalizeChecks(cust), b = C.normalizeChecks(C.toRoadIlluminate(a));
   ok(JSON.stringify(a.map(x => [x.type, x.x, x.y, x.min, x.max])) === JSON.stringify(b.map(x => [x.type, x.x, x.y, x.min, x.max])), "checks changed");

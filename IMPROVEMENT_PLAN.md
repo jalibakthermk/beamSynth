@@ -9,7 +9,7 @@ A phased rework of the beam generation algorithm. Every phase is judged against 
 | 2. Lowest-flux beam | Pass first, then reduce flux; CMA-ES search with convergence stops; flux on road becomes an optional minimum | Different random seeds give nearly the same beam | Done |
 | 3. Aim tolerance | Optional aim box (default 0, nominal aim only); when set, the solve must pass ECE at every position in the box. Peak intensity refined between grid points. Beam function and class moved above the input modes; Q scale reversed (0 smile, 1 "+") | Every benchmark case passes at all positions of a ±0.2° V, ±0.4° H box | Done |
 | 4. Physical limits | Optional (tick box, off by default): aperture area, LED luminance, optical efficiency | Imax never exceeds luminance × aperture; LED flux, emitting area and aperture use reported | Done |
-| 5. Blocking check | Name the check that prevents a target | Shown when Imax, flux or spread cannot be met | Planned |
+| 5. Blocking check | "Held back by" panel: for every unmet target, failed ECE check and missed road check, the checks or targets that oppose it (from the gradients of the cost terms at the solved beam) | Aperture limit and ECE Imax maximum named correctly; nothing shown when every target is met | Done |
 
 ## Results so far
 
@@ -23,7 +23,7 @@ A phased rework of the beam generation algorithm. Every phase is judged against 
 | Repeatability, customer-style set, 4 seeds (highest ÷ lowest) | Imax ×4.33, flux ×1.52, spread ×2.29 | Imax ×1.16, flux ×1.10, spread ×1.04 | Imax ×1.10, flux ×1.08, spread ×1.08 |
 | Tests | – | 21 of 21 pass | 22 of 22 pass |
 
-Phase 4 adds one test (23 of 23 pass). Example: a Class B low beam asked for 30 000 cd through a 20 × 15 mm aperture at 70 Mcd/m² (limit 21 000 cd) is solved at 20 374 cd and still passes ECE; a Class B high beam cannot pass through that aperture, because ECE needs at least 48 000 cd.
+Phases 4 and 5 add one test each (24 of 24 pass). Example: a Class B low beam asked for 30 000 cd through a 20 × 15 mm aperture at 70 Mcd/m² (limit 21 000 cd) is solved at 20 374 cd and still passes ECE; a Class B high beam cannot pass through that aperture, because ECE needs at least 48 000 cd.
 
 Notes:
 

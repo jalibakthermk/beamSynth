@@ -1228,7 +1228,11 @@ function createJob(c) {
       res.rows.push({ id: "Cut-off position", kind: "cutpos", where: side, val: sc.pos, target: cut.elbow, pass: null, margin: null });
       res.pass = res.rows.every(x => x.pass !== false); res.G = sc.G; res.cutPos = sc.pos;
     }
-    res.blocking = [];   // blocking-check analysis (phase 5): not switched on yet
+    // name what holds back every unmet target and failed check
+    try {
+      const ectx = Object.assign({}, ctx, { rfRelax: false }); ectx.road = ctx.road.map(x => Object.assign({}, x, { w: Math.max(1, x.w || 1) }));
+      res.blocking = explainMisses(best, u => dec(u, c.beam, cut, c.shape), ectx, listMisses(c, res, imaxAsked)).map(m => m.fixed ? Object.assign(m, { by: m.fixed }) : m);
+    } catch (e) { res.blocking = []; }
     return { P, res, ctx, cut, prefer, rfRelaxed: !!solver.rfRelaxed, evals: job.evals, loops: solver.cands.length, calibrations: job.cal, leftOut: solver.leftOut && solver.result && solver.result.miss ? solver.leftOut : null };
   };
   return job;
