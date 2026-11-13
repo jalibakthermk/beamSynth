@@ -121,8 +121,12 @@ details.fold:not([open]) .chev{transform:rotate(-45deg)}
 .cnt{font:700 11px var(--f-display);letter-spacing:.08em;padding:2px 7px;border-radius:3px;background:var(--sunk);color:var(--muted)}
 .cnt.p{background:color-mix(in srgb,var(--pass) 16%,transparent);color:var(--pass)}
 .cnt.f{background:color-mix(in srgb,var(--fail) 16%,transparent);color:var(--fail)}
-@media (max-width:1200px) and (min-width:641px){.summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media (max-width:640px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.kv span{font-size:16px}}
+.summary.six{grid-template-columns:repeat(6,minmax(0,1fr))}
+#physBox:not([hidden]){display:flex;flex-direction:column;gap:9px}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;margin:2px 0 8px;cursor:pointer}.chk input{width:16px;height:16px;accent-color:var(--accent)}
+.blk{margin:0;padding:0;list-style:none}.blk li{padding:9px 14px;border-top:1px solid var(--line);font-size:14px}.blk li b{font-weight:600}.blk li span{color:var(--muted)}
+@media (max-width:1200px) and (min-width:641px){.summary,.summary.six{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:640px){.summary,.summary.six{grid-template-columns:repeat(2,minmax(0,1fr))}.kv span{font-size:16px}}
 .tbl{overflow-x:auto}
 table{border-collapse:collapse;width:100%;font-size:13px}
 th{font:600 11px var(--f-display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -238,6 +242,22 @@ footer a:hover{color:var(--ink)}
   </fieldset>
 
   <fieldset>
+    <p class="lab">Physical limits</p>
+    <label class="chk"><input id="physOn" type="checkbox"> Apply physical limits</label>
+    <div id="physBox" hidden>
+    <div class="row2">
+      <label class="f">Aperture width (mm)<input id="apW" type="number" step="1" min="0" placeholder="no limit"></label>
+      <label class="f">Aperture height (mm)<input id="apH" type="number" step="1" min="0" placeholder="no limit"></label>
+    </div>
+    <div class="row2">
+      <label class="f">LED luminance (Mcd/m²)<input id="ledL" type="number" step="5" min="0" value="70"></label>
+      <label class="f">Optical efficiency (%)<input id="eff" type="number" step="1" min="1" max="100" value="45"></label>
+    </div>
+    <p class="note">With an aperture given, Imax is held at or below LED luminance × aperture area, the most any optic can deliver. Efficiency converts the emitted flux into the LED flux needed. Leave the aperture blank for no limit.</p>
+    </div>
+  </fieldset>
+
+  <fieldset>
     <p class="lab">Aim tolerance</p>
     <div class="row2">
       <label class="f">Vertical (±°)<input id="aimV" type="number" step="0.05" min="0" max="1" value="0"></label>
@@ -304,6 +324,10 @@ footer a:hover{color:var(--ink)}
 
 <main>
   <section class="summary" id="summary" aria-label="Result summary"></section>
+  <details class="screen fold" id="foldBlk" open hidden>
+    <summary class="bar"><span class="chev" aria-hidden="true"></span><h2>Held back by</h2><span class="note">what stops each unmet target or failed check</span></summary>
+    <div><ul class="blk" id="blkList"></ul></div>
+  </details>
 
   <section class="screen">
     <div class="bar">
@@ -917,7 +941,11 @@ function shiftTable(table, dh, dv) {
   });
 }
 const AIM_CORNERS = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
-function tableEval(P, table, imax, margin, detail) {
+// Cost terms by name, collected only while the blocking-check analysis runs (see explainMisses)
+let _T = null;
+function term(key, label, v) { if (_T && v) { const t = _T.get(key); if (t) t.v += v; else _T.set(key, { key, label, v }); } return v; }
+function tableEval(P, table, imax, margin, detail, tag) {
+  const tk = tag ? "aim|" : "ece|", tl = tag ? " (in the aim box)" : "";
   let cost = 0;
   const vals = {}, rows = [];
   for (const e of table) {
@@ -933,13 +961,13 @@ function tableEval(P, table, imax, margin, detail) {
       if (e.maxRef) max = e.maxRef.k * (vals[e.maxRef.id] || 0);
       val = min != null ? lo : hi;
       vals[e.id] = val;
-      if (min != null && max != null) { cost += penalty(lo, min, null, margin) + penalty(hi, null, max, margin); if (detail) rows.push(row(e, kind, lo, min, null), row(e, kind, hi, null, max)); continue; }
+      if (min != null && max != null) { cost += term(tk + e.id + "|min", "ECE " + e.id + " minimum" + tl, penalty(lo, min, null, margin)) + term(tk + e.id + "|max", "ECE " + e.id + " maximum" + tl, penalty(hi, null, max, margin)); if (detail) rows.push(row(e, kind, lo, min, null), row(e, kind, hi, null, max)); continue; }
     } else if (e.sum) { kind = "sum"; val = e.sum.reduce((a, id) => a + (vals[id] || 0), 0); vals[e.id] = val; }
     else val = vals[e.id];
     if (e.maxRef && !e.zone && !e.isLine) max = e.maxRef.k * (vals[e.maxRef.id] || 0);
     if (e.minRatioImax) min = e.minRatioImax * imax;
     if (e.info) { if (detail) rows.push(row(e, kind, val, null, null)); continue; }
-    cost += penalty(val, min, max, margin);
+    cost += term(tk + e.id, "ECE " + e.id + tl, penalty(val, min, max, margin));
     if (detail) rows.push(row(e, kind, val, min, max));
   }
   return { cost, rows };
@@ -964,7 +992,7 @@ function evaluate(P, ctx, detail) {
   // the grid peak underestimates Imax between grid points: refine it around the grid maximum
   // (a quick 2-level search while solving, a fine one for the final result)
   let pk = Math.max(r.imax, fr.imax), pkH = r.hMax, pkV = r.vMax;
-  if (detail) {
+  if (detail || ctx.finePeak) {
     for (let dh = -0.5; dh <= 0.501; dh += 0.05) for (let dv = -0.2; dv <= 0.201; dv += 0.025) { const x = evalI(P, r.hMax + dh, r.vMax + dv); if (x > pk) { pk = x; pkH = r.hMax + dh; pkV = r.vMax + dv; } }
   } else {
     for (const st of [[0.25, 0.1], [0.12, 0.05]]) {
@@ -977,44 +1005,49 @@ function evaluate(P, ctx, detail) {
   const sp = spreads(ctx.core, r, 0.05);
   const margin = detail ? 0 : 0.04, W = ctx.eceWeight || 1;
   let cost = 0;
-  const te = tableEval(P, ctx.table, imax, margin, detail), rows = te.rows;
+  const te = tableEval(P, ctx.table, imax, margin, detail), rows = te.rows || [];
   cost += W * te.cost;
   // aim tolerance: the ECE table must also hold with the beam shifted to each corner of the aim box
   let aimFails = null;
   if (ctx.aimTables) {
     aimFails = [];
     for (const tb of ctx.aimTables) {
-      const ta = tableEval(P, tb, imax, detail ? 0 : 0.015, detail);
+      const ta = tableEval(P, tb, imax, detail ? 0 : 0.015, detail, "aim");
       cost += W * ta.cost;
       if (detail) for (const x of ta.rows) if (x.pass === false && !aimFails.includes(x.id)) aimFails.push(x.id);
     }
   }
+  // physical limit: no direction can be brighter than source luminance x aperture area
+  if (ctx.imaxCap) {
+    cost += W * 3 * term("phys", "the aperture limit (LED luminance × aperture area)", penalty(imax, null, ctx.imaxCap, detail ? 0 : 0.02));
+    if (detail) rows.push({ id: "Aperture limit", kind: "phys", val: imax, min: null, max: ctx.imaxCap, pass: imax <= ctx.imaxCap * 1.0005, margin: (ctx.imaxCap - imax) / ctx.imaxCap });
+  }
   const roadRows = [];
   for (const c of ctx.road) {
     const cv = checkValue(P, c);
-    if (ctx.useRoad) cost += (c.w || 1) * penalty(cv.val, c.min, c.max, margin);
+    if (ctx.useRoad) cost += (c.w || 1) * term("road|" + c.label, "road check “" + c.label + "”", penalty(cv.val, c.min, c.max, margin));
     if (detail) roadRows.push(roadRow(c, cv));
   }
-  if (ctx.homogW && P.model === "hybrid") cost += ctx.homogW * kneePenalty(P);
+  if (ctx.homogW && P.model === "hybrid") cost += ctx.homogW * term("smooth", "the beam smoothness rule (hybrid model)", kneePenalty(P));
   if (ctx.cutCal && !detail) {   // calibration polish: hold the measured cut-off position and sharpness
     const sc = cutoffScan(P, ctx.cutCal.h, 0.02, ctx.cutCal.pos - 1.2, ctx.cutCal.pos + 1.2);
-    cost += 40 * (sc.pos - ctx.cutCal.pos) ** 2 + 60 * (sc.G - ctx.cutCal.G) ** 2;
+    cost += term("cutpos", "the cut-off position", 40 * (sc.pos - ctx.cutCal.pos) ** 2) + term("cutG", "the cut-off sharpness G", 60 * (sc.G - ctx.cutCal.G) ** 2);
   }
   const t = ctx.targets || {};
   const soft = (a, b, w) => (b ? w * ((a - b) / b) ** 2 : 0);
-  cost += soft(imax, t.imax, 10) + soft(flux, t.flux, 10) + soft(sp.spreadH, t.spreadH, t.hot ? 25 : 3) + soft(sp.spreadV, t.spreadV, 2);
+  cost += term("t|imax", "the requested Imax", soft(imax, t.imax, 10)) + term("t|flux", "the requested flux", soft(flux, t.flux, 10)) + term("t|spreadH", "the requested H spread", soft(sp.spreadH, t.spreadH, t.hot ? 25 : 3)) + term("t|spreadV", "the requested V spread", soft(sp.spreadV, t.spreadV, 2));
   if (t.hot) {   // hot spot stays where it was asked to be
     const mir = 1, dh = r.hMax - t.hot.h, dv = r.vMax - t.hot.v;
-    cost += 40 * (dh * dh + 4 * dv * dv);
+    cost += term("t|hot", "the requested hot spot position", 40 * (dh * dh + 4 * dv * dv));
   }
   const rfv = ctx.rf ? roadFluxFromGrid(ctx.rf) : null;   // fluxGrid was just evaluated above
   // flux on road: a value to hit when the beam is given by parameters; a minimum to reach when the lowest-flux beam is wanted
   // flux on road: when a minimum is given it is a requirement like a road check (and the first to give way if the checks conflict)
-  if (rfv != null && ctx.rf.target && !ctx.rfRelax) cost += penalty(rfv, ctx.rf.target, null, margin);
+  if (rfv != null && ctx.rf.target && !ctx.rfRelax) cost += term("rf", "the flux on road minimum", penalty(rfv, ctx.rf.target, null, margin));
   // preference among passing beams: the lowest emitted flux, then (always, weakly) the lowest peak intensity
-  if (ctx.prefer === "flux") cost += PREF.flux * flux / 1000;
-  else if (ctx.rfMin) cost += PREF.passFlux * flux / 1000;   // pass-finding step of a lowest-flux solve: lean toward low flux, weakly
-  if (!t.imax) cost += PREF.imax * imax / 100000;
+  if (ctx.prefer === "flux") cost += term("pref|flux", "the lowest-flux preference", PREF.flux * flux / 1000);
+  else if (ctx.rfMin) cost += term("pref|flux", "the lowest-flux preference", PREF.passFlux * flux / 1000);   // pass-finding step of a lowest-flux solve: lean toward low flux, weakly
+  if (!t.imax) cost += term("pref|imax", "the preference for a low peak intensity", PREF.imax * imax / 100000);
   if (!detail) return cost;
   return { cost, imax, flux, aimFails, roadFlux: rfv, roadFluxTarget: ctx.rf ? ctx.rf.target : null, hMax: r.hMax, vMax: r.vMax, sp, rows, roadRows, pass: rows.every(x => x.pass !== false), roadPass: roadRows.every(x => x.pass !== false) };
 }
@@ -1024,6 +1057,25 @@ function row(e, kind, val, min, max) {
   if (min != null) { pass = val >= min; margin = (val - min) / min; }
   if (max != null) { const pm = val <= max, mm = (max - val) / max; pass = pass == null ? pm : pass && pm; margin = margin == null ? mm : Math.min(margin, mm); }
   return { id: e.id, kind, h: e.h, v: e.v, x: e.x_m, y: e.y_m, z: e.z_m, zone: e.zone, val, min, max, pass, margin };
+}
+
+// ---------- physical limits ----------
+// Luminance is conserved through any optic, so in every direction I <= L x A (source luminance x lit aperture area).
+// Units: Mcd/m2 x mm2 = cd. Optical efficiency links the emitted flux to the LED flux.
+const PHYS_DEFAULT = { apW: null, apH: null, lum: 70, eff: 0.45 };
+function physLimits(ph) {
+  ph = ph || {};
+  const pos = x => (isFinite(x) && x > 0 ? +x : null);
+  const apW = pos(ph.apW), apH = pos(ph.apH), lum = pos(ph.lum), eff = pos(ph.eff) ? Math.min(1, ph.eff) : null;
+  const area = apW && apH ? apW * apH : null;
+  return { apW, apH, lum, eff, area, imaxCap: area && lum ? lum * area : null };
+}
+// What the solved beam asks of the light source: LED flux, the smallest Lambertian emitting area that can supply it
+// at this luminance (flux = pi x L x A), and the share of the aperture that must appear lit from the hot spot direction.
+function physReport(ph, imax, flux) {
+  const p = physLimits(ph), ledFlux = p.eff ? flux / p.eff : null;
+  return Object.assign(p, { ledFlux, minEmit: ledFlux && p.lum ? ledFlux / (Math.PI * p.lum) : null,
+    apertureUsed: p.imaxCap ? imax / p.imaxCap : null, minAperture: p.lum ? imax / p.lum : null });
 }
 
 // ---------- context + solver ----------
@@ -1038,7 +1090,7 @@ function buildContext(o) {
     aimTables: o.aim && (o.aim.h > 0 || o.aim.v > 0) ? AIM_CORNERS.map(([sh, sv]) => compileTable(shiftTable(o.table, sh * o.aim.h, sv * o.aim.v), beam, cut, 0.5)) : null,
     road: compileRoad(o.road, beam, cut),
     rf: null,
-    useRoad: o.useRoad, targets: o.targets, shape: o.shape || null
+    useRoad: o.useRoad, targets: o.targets, shape: o.shape || null, imaxCap: o.imaxCap || null
   };
   ctx.rf = compileRoadFluxGrid(o.roadFlux, ctx.fluxGrid);
   return ctx;
@@ -1453,12 +1505,13 @@ function defaultConfig(o) {
     checks: normalizeChecks(o.checks || (mode === "param" && beam === "low" && cls === "B" ? PRESET_ROAD.low.checks : [])), evalH: 0, plane: "vertical", targets,
     roadFlux: { zone: Object.assign({}, ROAD_FLUX_ZONE), target: rft, lamps: "one", height: H, spacing: sp, traffic: lht ? "LHT" : "RHT" },
     shape: mode === "param" ? { smile: o.smile != null ? o.smile : Q_DEFAULT, hot: targets.hot } : null, lane: 3.5, mode, model: o.model || "hybrid",
-    aim: o.aim !== undefined ? o.aim : Object.assign({}, AIM_DEFAULT) };
+    aim: o.aim !== undefined ? o.aim : Object.assign({}, AIM_DEFAULT),
+    physical: o.physical ? Object.assign({}, PHYS_DEFAULT, o.physical) : null };   // physical limits are optional: null = not applied
 }
 function contextFor(c) {
   return buildContext({ beam: c.beam, cut: c.cut, table: c.table,
     road: { checks: c.checks, height: c.H, spacing: c.sp, plane: c.plane || "vertical", traffic: c.lht ? "LHT" : "RHT", evalH: c.evalH },
-    useRoad: c.mode === "road", targets: c.targets, roadFlux: c.roadFlux, shape: c.shape, aim: c.aim });
+    useRoad: c.mode === "road", targets: c.targets, roadFlux: c.roadFlux, shape: c.shape, aim: c.aim, imaxCap: physLimits(c.physical).imaxCap });
 }
 // R149 Annex 5 cut-off scan at horizontal angle h: G = log10 I(b) - log10 I(b + 0.1 deg).
 // Returns the largest G and the cut-off position (inflection of log I, i.e. the steepest point).
@@ -1478,6 +1531,10 @@ function cutoffScan(P, h, step, from, to) {
 
 // job.run(k) advances the solve by about k evaluations and returns true when finished; job.result() gives the beam.
 function createJob(c) {
+  // a requested Imax above the aperture limit (luminance x area) cannot be made: aim for the limit instead
+  const cap0 = physLimits(c.physical).imaxCap;
+  let imaxAsked = null;
+  if (cap0 && c.targets && c.targets.imax > cap0) { imaxAsked = c.targets.imax; c = Object.assign({}, c, { targets: Object.assign({}, c.targets, { imax: cap0 * 0.98 }) }); }
   const model = c.model || "hybrid", hy = model === "hybrid", sq = model === "sqrt" || hy, dec = hy ? decodeY : sq ? decodeS : decode;
   const low = c.beam === "low", CAL = low ? 3 : 0, CAL_IT = 350;
   let cut = low && c.cut ? Object.assign({}, c.cut) : null, ctx = contextFor(Object.assign({}, c, { cut }));
@@ -1541,6 +1598,8 @@ function createJob(c) {
   job.result = () => {
     const P = dec(best, c.beam, cut, c.shape);
     const res = evaluate(P, Object.assign({}, ctx, { useRoad: true, cutCal: null }), true);
+    res.phys = c.physical ? physReport(c.physical, res.imax, res.flux) : null;
+    if (res.phys) res.phys.imaxRequested = imaxAsked;   // set when the requested Imax was above the aperture limit
     res.aim = c.aim && (c.aim.h > 0 || c.aim.v > 0) ? c.aim : null;
     res.aimFailCount = res.aim ? aimAnalysis(P, c.table, c.beam, cut, c.aim, res.imax, res.rows) : 0;
     res.aimPass = res.aimFailCount === 0;
@@ -1551,13 +1610,73 @@ function createJob(c) {
       res.rows.push({ id: "Cut-off position", kind: "cutpos", where: side, val: sc.pos, target: cut.elbow, pass: null, margin: null });
       res.pass = res.rows.every(x => x.pass !== false); res.G = sc.G; res.cutPos = sc.pos;
     }
+    res.blocking = [];   // blocking-check analysis (phase 5): not switched on yet
     return { P, res, ctx, cut, prefer, rfRelaxed: !!solver.rfRelaxed, evals: job.evals, loops: solver.cands.length, calibrations: job.cal, leftOut: solver.leftOut && solver.result && solver.result.miss ? solver.leftOut : null };
   };
   return job;
 }
+// ---------- blocking checks ----------
+// At the solved beam the cost is at a minimum, so the pull of every unmet term is balanced by the terms that oppose it.
+// For an unmet target or failed check t, the share of another term i is  -(grad_i . grad_t) / |grad_t|^2  (the shares of all
+// opposing terms add up to about 1). The terms with the largest shares are the ones holding t back.
+function costTerms(u, decodeFn, ctx) {
+  _T = new Map();
+  try { evaluate(decodeFn(u), Object.assign({}, ctx, { finePeak: true }), false); return _T; } finally { _T = null; }
+}
+function explainMisses(u, decodeFn, ctx, misses) {
+  if (!misses.length) return [];
+  const n = u.length, h = 0.01, base = costTerms(u, decodeFn, ctx), grads = new Map();
+  for (const k of base.keys()) grads.set(k, new Float64Array(n));
+  for (let j = 0; j < n; j++) {
+    const up = Array.from(u), dn = Array.from(u); up[j] += h; dn[j] -= h;
+    const a = costTerms(up, decodeFn, ctx), b = costTerms(dn, decodeFn, ctx);
+    for (const k of new Set([...a.keys(), ...b.keys()])) {
+      if (!grads.has(k)) { grads.set(k, new Float64Array(n)); base.set(k, a.get(k) || b.get(k)); }
+      grads.get(k)[j] = ((a.get(k) ? a.get(k).v : 0) - (b.get(k) ? b.get(k).v : 0)) / (2 * h);
+    }
+  }
+  const dot = (x, y) => { let s = 0; for (let j = 0; j < n; j++) s += x[j] * y[j]; return s; };
+  const out = [];
+  for (const m of misses) {
+    const keys = m.keys.filter(k => grads.has(k));
+    if (!keys.length) { out.push(Object.assign({ by: [] }, m)); continue; }
+    const g = new Float64Array(n); for (const k of keys) { const gk = grads.get(k); for (let j = 0; j < n; j++) g[j] += gk[j]; }
+    const gg = dot(g, g), by = [];
+    if (gg > 1e-12) for (const [k, gk] of grads) {
+      if (keys.includes(k)) continue;
+      const share = -dot(gk, g) / gg;
+      if (share > 0.02) by.push({ key: k, label: base.get(k).label, share });
+    }
+    // shares as fractions of everything that opposes t; keep the main ones. A low total means nothing clearly opposes t
+    // (the solver gave it up, or the beam model itself cannot do it), which is reported as "weak".
+    const tot = by.reduce((s, x) => s + x.share, 0);
+    for (const x of by) x.share /= tot || 1;
+    by.sort((a, b) => b.share - a.share);
+    out.push(Object.assign({}, m, { by: by.filter(x => x.share >= 0.2).slice(0, 3), weak: tot < 0.3 }));
+  }
+  return out;
+}
+// What was asked for and not reached: requested beam values, failed ECE checks, missed road checks
+function listMisses(c, res, imaxAsked) {
+  const t = c.targets || {}, out = [], rel = (a, b) => Math.abs(a - b) / b;
+  if (imaxAsked) out.push({ what: "Imax", unit: "cd", asked: imaxAsked, got: res.imax, keys: [], fixed: [{ key: "phys", label: "the aperture limit (LED luminance × aperture area)", share: 1 }] });
+  else if (t.imax && rel(res.imax, t.imax) > 0.05) out.push({ what: "Imax", unit: "cd", asked: t.imax, got: res.imax, keys: ["t|imax"] });
+  if (t.flux && rel(res.flux, t.flux) > 0.05) out.push({ what: "Flux", unit: "lm", asked: t.flux, got: res.flux, keys: ["t|flux"] });
+  if (t.spreadH && rel(res.sp.spreadH, t.spreadH) > 0.08) out.push({ what: "H spread", unit: "°", asked: t.spreadH, got: res.sp.spreadH, keys: ["t|spreadH"] });
+  if (t.spreadV && rel(res.sp.spreadV, t.spreadV) > 0.1) out.push({ what: "V spread", unit: "°", asked: t.spreadV, got: res.sp.spreadV, keys: ["t|spreadV"] });
+  if (t.hot && Math.hypot(res.hMax - t.hot.h, 2 * (res.vMax - t.hot.v)) > 0.3) out.push({ what: "Hot spot", unit: "pos", asked: t.hot, got: { h: res.hMax, v: res.vMax }, keys: ["t|hot"] });
+  for (const r of res.rows) if (r.pass === false) {
+    if (r.kind === "phys") out.push({ what: "Aperture limit", unit: "cd", check: true, limit: "max", asked: r.max, got: r.val, keys: ["phys"] });
+    else if (r.kind === "G") out.push({ what: "Cut-off G", unit: "G", check: true, got: r.val, keys: ["cutG"] });
+    else out.push({ what: "ECE " + r.id, unit: "cd", check: true, limit: r.min != null && r.val < r.min ? "min" : "max", asked: r.min != null && r.val < r.min ? r.min : r.max, got: r.val, keys: ["ece|" + r.id, "ece|" + r.id + "|min", "ece|" + r.id + "|max"] });
+  }
+  if (c.mode === "road") for (const r of res.roadRows) if (r.pass === false) out.push({ what: "Road check “" + r.id + "”", unit: r.unit, check: true, limit: r.min != null ? "min" : "max", asked: r.min != null ? r.min : r.max, got: r.val, keys: ["road|" + r.id] });
+  if (res.roadFluxTarget && res.roadFlux < res.roadFluxTarget * 0.995) out.push({ what: "Flux on road", unit: "lm", check: true, limit: "min", asked: res.roadFluxTarget, got: res.roadFlux, keys: ["rf"] });
+  return out;
+}
 function solveSync(c) { const job = createJob(c); while (!job.run(200)); return job.result(); }
 
-if (typeof module !== "undefined") module.exports = { AIM_DEFAULT, shiftTable, tableEval, aimAnalysis, cutoffScan, cutBlend, widthForG, gLimits, G_DEFAULT, PARAM_DEFAULTS, Q_DEFAULT, tableKeyFor, paramDefaults, hotDefault, defaultCut, defaultConfig, contextFor, createJob, solveSync, makeGrid, evalGrid, makeSolverS, makeCMA, decodeY, initHybrid, kneePenalty, makeLoopSolverS, decodeS, initSqrt, makeSolverS, sqrtRel, SMILE, applySmile, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };
+if (typeof module !== "undefined") module.exports = { explainMisses, listMisses, costTerms, PHYS_DEFAULT, physLimits, physReport, AIM_DEFAULT, shiftTable, tableEval, aimAnalysis, cutoffScan, cutBlend, widthForG, gLimits, G_DEFAULT, PARAM_DEFAULTS, Q_DEFAULT, tableKeyFor, paramDefaults, hotDefault, defaultCut, defaultConfig, contextFor, createJob, solveSync, makeGrid, evalGrid, makeSolverS, makeCMA, decodeY, initHybrid, kneePenalty, makeLoopSolverS, decodeS, initSqrt, makeSolverS, sqrtRel, SMILE, applySmile, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };
 
 </script>
 <script>
@@ -1646,17 +1765,41 @@ $("exLow").onclick = () => { $("roadJson").value = compactJSON(PRESET_ROAD.low);
 $("exHigh").onclick = () => { $("roadJson").value = compactJSON(PRESET_ROAD.high); syncFromJson(); };
 
 // Q as shown on the page: 0 = strong smile, 1 = "+" shape (the model's smile factor is 1 - Q)
+function physOut() {
+  const p = S.res.phys; if (!p) return null;
+  const r = (x, d) => x == null ? null : Math.round(x * 10 ** d) / 10 ** d;
+  return { aperture_mm: { width: p.apW, height: p.apH }, ledLuminance_Mcd_m2: p.lum, efficiency_pct: p.eff ? r(p.eff * 100, 1) : null,
+    ImaxLimit_cd: r(p.imaxCap, 0), ledFlux_lm: r(p.ledFlux, 0), minEmittingArea_mm2: r(p.minEmit, 2), minApertureAtImax_mm2: r(p.minAperture, 0) };
+}
+function physLines() {
+  const p = S.res.phys; if (!p) return [];
+  const o = [];
+  if (p.imaxCap) o.push(`[_APERTURE] ${p.apW} x ${p.apH} mm, LED luminance ${p.lum} Mcd/m2, Imax limit ${Math.round(p.imaxCap)} cd`);
+  if (p.ledFlux) o.push(`[_LEDFLUX] ${Math.round(p.ledFlux)} lm needed at ${Math.round(p.eff * 100)} % optical efficiency`);
+  return o;
+}
 function qOut() { return S.cfg && S.cfg.shape ? Math.round((1 - S.cfg.shape.smile) * 100) / 100 : 1; }
 // Beam function and class are common to both input modes. A requirement set that names them sets the selectors when it is loaded or edited.
 function syncFromJson() {
   let road; try { road = JSON.parse($("roadJson").value); } catch (e) { return; }
   if (!road || Array.isArray(road)) return;
+  // a "physical" block in the requirement set switches the physical limits on and fills them in
+  const ph = road.physical;
+  if (ph && typeof ph === "object") {
+    const ap = ph.aperture_mm || {};
+    if (ap.width !== undefined) $("apW").value = ap.width == null ? "" : ap.width;
+    if (ap.height !== undefined) $("apH").value = ap.height == null ? "" : ap.height;
+    if (ph.ledLuminance_Mcd_m2 > 0) $("ledL").value = ph.ledLuminance_Mcd_m2;
+    if (ph.efficiency_pct > 0) $("eff").value = ph.efficiency_pct;
+    $("physOn").checked = ph.enabled !== false; $("physBox").hidden = !$("physOn").checked;
+  }
   const fn = road.function === "low" || road.function === "high" ? road.function : S.beam;
   const cls = road.class && CLASSES[fn].some(c => c[0] === road.class) ? road.class : null;
   if (fn === S.beam && (!cls || cls === $("cls").value)) return;
   $("fn").value = fn; S.beam = fn; fillClasses(cls || undefined); setDefaults(); syncCut(); showTable();
 }
 $("roadJson").addEventListener("change", syncFromJson);
+$("physOn").addEventListener("change", () => { $("physBox").hidden = !$("physOn").checked; });
 function setMode(m) {
   S.mode = m; $("mRoad").setAttribute("aria-pressed", m === "road"); $("mParam").setAttribute("aria-pressed", m === "param");
   $("roadPanel").hidden = m !== "road"; $("paramPanel").hidden = m !== "param";
@@ -1716,12 +1859,16 @@ function gather() {
   const lane = (road && !isSet && road.road && road.road.laneWidth_m) || 3.5;
   const evalH = Math.max(0, num("evalH") || 0);
   const aim = { h: Math.min(2, Math.max(0, num("aimH") || 0)), v: Math.min(1, Math.max(0, num("aimV") || 0)) };
+  const effPct = num("eff"), physOn = $("physOn").checked;
+  const physical = physOn ? { apW: num("apW"), apH: num("apH"), lum: num("ledL"), eff: effPct ? Math.min(100, effPct) / 100 : null } : null;
+  if (physOn && (physical.apW > 0) !== (physical.apH > 0)) throw new Error("Physical limits: give both the aperture width and height, or leave both blank.");
+  if (physOn && (physical.apW > 0) && !(physical.lum > 0)) throw new Error("Physical limits: the LED luminance is needed to apply the aperture limit.");
   const shape = S.mode === "param" ? { smile: Math.min(1, Math.max(0, 1 - (+$("smile").value))), hot: targets.hot } : null;
   const rfZone = { x1: Math.max(0, num("rfX1") ?? 0), x2: num("rfX2") ?? 100, left: Math.abs(num("rfYL") ?? 10), right: Math.abs(num("rfYR") ?? 10) };
   if (!(rfZone.x2 > rfZone.x1) || !(rfZone.left + rfZone.right > 0)) throw new Error("Flux on road zone: 'to' must be beyond 'from', and the width must be more than 0.");
   const rfTarget = num("rfT");
   const roadFlux = { zone: rfZone, target: rfTarget && rfTarget > 0 ? rfTarget : null, lamps: $("rfL").value, height: H, spacing: sp, traffic: lht ? "LHT" : "RHT" };
-  return { beam: S.beam, cls: $("cls").value, key: tableKey(), sym, cut, table, lht, H, sp, checks, evalH, targets, roadFlux, shape, aim, lane, mode: S.mode };
+  return { beam: S.beam, cls: $("cls").value, key: tableKey(), sym, cut, table, lht, H, sp, checks, evalH, targets, roadFlux, shape, aim, physical, lane, mode: S.mode };
 }
 
 function generate() {
@@ -1749,8 +1896,11 @@ function generate() {
     const loopsTxt = "";
     const prefTxt = c.prefer === "flux" && !nf ? ` Lowest-flux beam: ${fmt(S.res.flux)} lm.` : "";
     const rfTxt = c.rfRelaxed && S.res.roadFlux < c.roadFlux.target ? ` Flux on road minimum relaxed (${fmt(S.res.roadFlux)} of ${fmt(c.roadFlux.target)} lm) so the road checks can pass.` : "";
+    const ph = S.res.phys, capRow = S.res.rows.find(r => r.kind === "phys");
+    const physTxt = capRow && capRow.pass === false ? ` Imax is above the aperture limit of ${fmt(ph.imaxCap)} cd (LED luminance × aperture area).`
+      : ph && ph.imaxRequested ? ` The requested ${fmt(ph.imaxRequested)} cd is above the aperture limit of ${fmt(ph.imaxCap)} cd (LED luminance × aperture area), so Imax is held at the limit.` : "";
     const leftTxt = c.leftOut && S.res.roadRows.some(r => r.pass === false && r.id === c.leftOut) ? ` Left out: “${c.leftOut}”, which conflicts with the other checks.` : "";
-    msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s${loopsTxt}. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : S.res.aimFailCount ? `ECE passes at nominal aim, but ${S.res.aimFailCount} check${S.res.aimFailCount > 1 ? "s fail" : " fails"} inside the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : S.res.aim ? `All ECE checks pass across the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : "All ECE checks pass.") + (c.mode !== "road" ? "" : nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : " All road checks pass.") + leftTxt + prefTxt + rfTxt, nf > 0 || S.res.aimFailCount > 0);
+    msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s${loopsTxt}. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : S.res.aimFailCount ? `ECE passes at nominal aim, but ${S.res.aimFailCount} check${S.res.aimFailCount > 1 ? "s fail" : " fails"} inside the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : S.res.aim ? `All ECE checks pass across the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : "All ECE checks pass.") + (c.mode !== "road" ? "" : nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : " All road checks pass.") + leftTxt + prefTxt + rfTxt + physTxt, nf > 0 || S.res.aimFailCount > 0);
     $("iesOut").value = "";
     renderAll();
   };
@@ -1983,17 +2133,28 @@ function req(r, unit) { const p = []; if (r.min != null) p.push("≥ " + (unit =
 function pillRoad(r) { return r.pass === false && S.cfg && S.cfg.leftOut === r.id ? '<span class="pill i" title="Left out: it conflicts with the other checks">LEFT OUT</span>' : pill(r.pass); }
 function pill(p) { return p === true ? '<span class="pill p">PASS</span>' : p === false ? '<span class="pill f">FAIL</span>' : '<span class="pill i">INFO</span>'; }
 
+// what the beam asks of the light source and the aperture
+function physTiles(p) {
+  if (!p) return "";
+  const led = p && p.ledFlux ? kv("LED flux", fmt(p.ledFlux) + " lm", `at ${fmt(p.eff * 100)} % efficiency` + (p.minEmit ? ` · emitting area ≥ ${fmt(p.minEmit, 1)} mm²` : "")) : kv("LED flux", "—", "set the optical efficiency");
+  const ap = !p || !p.lum ? kv("Min aperture", "—", "set the LED luminance")
+    : p.imaxCap ? kv("Imax limit", fmt(p.imaxCap) + " cd", `${fmt(p.lum)} Mcd/m² × ${fmt(p.area)} mm² · ${fmt(100 * p.apertureUsed)} % used`)
+    : kv("Min aperture", fmt(p.minAperture) + " mm²", `lit area needed for Imax at ${fmt(p.lum)} Mcd/m²`);
+  return led + ap;
+}
 function renderSummary() {
   const r = S.res, c = S.cfg, t = c.targets, nf = r.rows.filter(x => x.pass === false).length, n = r.rows.filter(x => x.pass != null).length;
   const nr = r.roadRows.filter(x => x.pass === false).length, nrt = r.roadRows.filter(x => x.pass != null).length;
   const asked = (v, d, u) => c.mode === "param" && v ? `requested ${fmt(v, d)}${u}` : "";
   const mir = c.lht ? -1 : 1;
   const r1 = reach(1), r3 = reach(3);
+  $("summary").classList.toggle("six", !!r.phys);
   $("summary").innerHTML =
     kv("ECE verdict", nf ? `${nf} of ${n} fail` : r.aimFailCount ? `${r.aimFailCount} fail in aim box` : `PASS ${n}/${n}`, (r.aim && !nf && !r.aimFailCount ? `aim ±${fmt(r.aim.v, 2)}° V, ±${fmt(r.aim.h, 2)}° H · ` : "") + `Class ${c.cls === "DSES" ? "DS / ES" : c.cls} ${c.beam === "low" ? "passing" : "driving"} beam`, "verdict " + (nf || r.aimFailCount ? "bad" : "ok")) +
-    kv("Road checks", nrt ? (nr ? `${nr} of ${nrt} missed` : `met ${nrt}/${nrt}`) : "none", c.mode === "road" ? "solved for" : "checked only", "verdict " + (nr ? "bad" : "ok")) +
+    kv("Road checks", nrt ? (r.phys ? `met ${nrt - nr}/${nrt}` : nr ? `${nr} of ${nrt} missed` : `met ${nrt}/${nrt}`) : "none", c.mode === "road" ? "solved for" : "checked only", "verdict " + (nr ? "bad" : "ok")) +
     kv("Imax", fmt(r.imax) + " cd", asked(t.imax, 0, " cd")) +
     kv("Flux", fmt(r.flux) + " lm", asked(t.flux, 0, " lm") || "emitted, one lamp") +
+    physTiles(r.phys) +
     kv("Flux on road", r.roadFlux == null ? "—" : fmt(r.roadFlux) + " lm", (r.roadFluxTarget ? `minimum ${fmt(r.roadFluxTarget)} lm · ` : "") + (c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair")) +
     kv("Road share", r.roadFlux == null || !r.flux ? "—" : fmt(100 * r.roadFlux / (r.flux * (c.roadFlux.lamps === "one" ? 1 : 2))) + " %", `of emitted flux, ${fmt(c.roadFlux.zone.x1)}–${fmt(c.roadFlux.zone.x2)} m, ${fmt(c.roadFlux.zone.left, 1)} L / ${fmt(c.roadFlux.zone.right, 1)} R`) +
     kv("H spread", "±" + fmt(r.sp.spreadH, 1) + "°", asked(t.spreadH, 1, "°") || `${angH(mir < 0 ? -r.sp.right : r.sp.left)} … ${angH(mir < 0 ? -r.sp.left : r.sp.right)}`) +
@@ -2013,6 +2174,7 @@ function renderTables() {
     S.res.rows.map(r => {
       if (r.kind === "G") return `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>scan at ${r.where}</td><td class="n">${r.max == null ? "≥ " + fmt(r.min, 2) : fmt(r.min, 2) + " to " + fmt(r.max, 2)}</td><td class="n">${fmt(r.val, 3)}</td><td class="n">${fmt(100 * r.margin, 0)} %</td>${hasAim ? '<td class="n aim"></td>' : ""}<td>${pill(r.pass)}</td></tr>`;
       if (r.kind === "cutpos") return `<tr><td class="id">${r.id}</td><td>scan at ${r.where}</td><td class="n">${angV(r.target)}</td><td class="n">${angV(r.val)}</td><td class="n"></td>${hasAim ? '<td class="n aim"></td>' : ""}<td>${pill(null)}</td></tr>`;
+      if (r.kind === "phys") return `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>luminance × area</td><td class="n">${req(r)}</td><td class="n">${fmtCd(r.val)}</td><td class="n">${fmt(100 * r.margin, 0)} %</td>${hasAim ? '<td class="n aim"></td>' : ""}<td>${pill(r.pass)}</td></tr>`;
       const pos = r.kind === "line" ? "line " + (r.min != null ? "min" : "max") : r.zone ? "zone " + (r.min != null ? "min" : "max") : r.kind === "sum" ? "sum" : r.h != null ? `${angH(mir * r.h)} ${angV(r.v)}` : "global";
       return `<tr class="${r.pass === false || r.aimPass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>${pos}</td><td class="n">${req(r)}</td><td class="n">${fmtCd(r.val)}</td><td class="n">${r.margin == null ? "" : fmt(100 * r.margin, 0) + " %"}</td>${aimCell(r)}<td>${pillEce(r)}</td></tr>`;
     }).join("") + "</tbody>";
@@ -2044,7 +2206,22 @@ function recomputeRoad() {
   S.res.roadRows = rd.map(rc => roadRow(rc, checkValue(S.P, rc)));
 }
 
-function renderAll() { if (!S.res) return; recomputeRoad(); renderSummary(); renderTables(); setCount("ecCount", S.res.rows); setCount("rdCount", S.res.roadRows); drawIso(); drawRoad(); }
+// Held back by: for every unmet target and failed check, the checks that oppose it
+function renderBlocking() {
+  const list = (S.res.blocking || []), c = S.cfg, mir = c.lht ? -1 : 1;
+  $("foldBlk").hidden = !list.length;
+  const val = (m, x) => m.unit === "pos" ? `${angH(mir * x.h)} ${angV(x.v)}` : m.unit === "G" ? fmt(x, 3) : m.unit === "°" ? fmt(x, 1) + "°" : m.unit === "lx" ? fmt(x, 2) + " lx" : fmt(x, m.unit === "m" ? 1 : 0) + " " + m.unit;
+  const esc = s => String(s).replace(/[&<>]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch]));
+  $("blkList").innerHTML = list.map(m => {
+    const head = m.check ? (m.asked != null ? `${val(m, m.got)}, ${m.limit === "max" ? "limit" : "needs"} ${val(m, m.asked)}` : val(m, m.got)) : `${val(m, m.got)}, requested ${val(m, m.asked)}`;
+    const left = c.leftOut && m.what === "Road check “" + c.leftOut + "”";
+    const names = m.by.map(b => esc(b.label)).join(", ");
+    const why = !m.by.length ? (left ? "left out: it conflicts with the other checks as a whole" : "no single check stands out; the beam model cannot reach it together with the rest")
+      : (left ? "left out; " : "") + (m.weak ? "mainly " : "held back by ") + `<b>${names}</b>`;
+    return `<li><b>${esc(m.what)}</b> <span>${head}</span><br>${why.charAt(0).toUpperCase() + why.slice(1)}</li>`;
+  }).join("");
+}
+function renderAll() { if (!S.res) return; recomputeRoad(); renderSummary(); renderBlocking(); renderTables(); setCount("ecCount", S.res.rows); setCount("rdCount", S.res.roadRows); drawIso(); drawRoad(); }
 ["isoUnit", "isoRange", "isoPts"].forEach(id => $(id).addEventListener("change", () => S.res && drawIso()));
 ["roadRange", "roadPts"].forEach(id => $(id).addEventListener("change", () => S.res && drawRoad()));
 $("plane").addEventListener("change", () => S.res && renderAll());
@@ -2068,6 +2245,7 @@ function buildIES() {
     `[_ROADFLUX] ${Math.round(S.res.roadFlux)} lm, ${c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair"}, ${c.roadFlux.zone.x1}-${c.roadFlux.zone.x2} m, ${c.roadFlux.zone.left} m L / ${c.roadFlux.zone.right} m R`,
     ...(c.shape ? [`[_QFACTOR] ${qOut()}`] : []),
     ...(S.res.G ? [`[_CUTOFF] G ${S.res.G.toFixed(3)} at 2.5 deg, cut-off at ${Math.abs(S.res.cutPos).toFixed(2)} deg D`] : []),
+    ...physLines(),
     ...(S.res.aim ? [`[_AIMBOX] passes ECE within +/-${S.res.aim.v} deg V, +/-${S.res.aim.h} deg H: ${S.res.aimFailCount ? "no" : "yes"}`] : []),
     `[_MODEL] ${S.P.model === "hybrid" ? "hybrid: square-root core + lobes" : S.P.model === "sqrt" ? "square-root fall-off" : "Gaussian lobes"}`,
     `[_GENERATED] ${new Date().toISOString().slice(0, 10)}`,
@@ -2113,7 +2291,7 @@ $("paramCopy").onclick = () => {
       core: { law: "I = A * exp(-k * (sqrt(rho + eps) - sqrt(eps))), rho = 1 at 5 % of A", A_cd: Math.round(P.A), centre_deg: { h: r2(P.h0), v: r2(P.v0) },
         extent_deg: { left: r2(P.Rl), right: r2(P.Rr), down: r2(P.Rd), up: r2(P.Ru) }, k: r2(P.kn), eps: r2(P.eps) },
       lobes: P.lobes.map((c, i) => ({ name: ["spread", "foreground"][i], A_cd: Math.round(c.A), h_deg: r2(c.h), v_deg: r2(c.v), sigmaH_deg: r2(c.sh), sigmaV_deg: r2(c.sv) })),
-      qFactor: qOut(), glareFloor_cd: S.cfg.beam === "low" ? Math.round(P.sigA) : 0 };
+      physical: physOut(), qFactor: qOut(), glareFloor_cd: S.cfg.beam === "low" ? Math.round(P.sigA) : 0 };
     const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy")); return;
   }
   if (S.P.model === "sqrt") {
@@ -2122,14 +2300,14 @@ $("paramCopy").onclick = () => {
       law: "I = Imax * exp(-k * (sqrt(rho + eps) - sqrt(eps))), rho = 1 at the 5 % isoline", note: "Internal frame is RHT; LHT mirrors H.",
       cutoff: S.cfg.beam === "low" ? S.cfg.cut : null, Imax_cd: Math.round(P.A), centre_deg: { h: r2(P.h0), v: r2(P.v0) },
       extent_5pct_deg: { left: r2(P.Rl), right: r2(P.Rr), down: r2(P.Rd), up: r2(P.Ru) }, k: r2(P.kn), eps: r2(P.eps),
-      qFactor: qOut(), glareFloor_cd: S.cfg.beam === "low" ? Math.round(P.sigA) : 0 };
+      physical: physOut(), qFactor: qOut(), glareFloor_cd: S.cfg.beam === "low" ? Math.round(P.sigA) : 0 };
     const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy")); return;
   }
   const r2 = x => Math.round(x * 1000) / 1000;
   const o = { function: S.cfg.beam, class: S.cfg.cls, traffic: S.cfg.lht ? "LHT" : "RHT", note: "Internal frame is RHT; LHT mirrors H.", cutoff: S.cfg.beam === "low" ? S.cfg.cut : null,
     lobes: S.P.comps.map((c, i) => ({ name: ["hot spot", "spread", "foreground"][i], A_cd: Math.round(c.A), h_deg: r2(c.h), v_deg: r2(c.v), sigmaH_deg: r2(c.sh), sigmaV_deg: r2(c.sv) })),
     roadFlux: { value_lm: Math.round(S.res.roadFlux), target_lm: S.res.roadFluxTarget, lamps: S.cfg.roadFlux.lamps, zone: S.cfg.roadFlux.zone },
-    qFactor: qOut(),
+    physical: physOut(), qFactor: qOut(),
     glareFloor_cd: S.cfg.beam === "low" ? Math.round(S.P.sigA) : 0 };
   const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy"));
 };

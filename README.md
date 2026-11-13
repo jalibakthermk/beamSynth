@@ -17,6 +17,7 @@ It runs entirely in the browser: open `docs/index.html`, or the GitHub Pages sit
 - **Flux on road** (optional minimum). The luminous flux that reaches the road surface inside a zone you define (distance from–to, width left and right), for one lamp or the lamp pair. The page always reports it, with the road share (the fraction of the emitted flux that lands in the zone). Set a minimum only when one is required; it then counts like a road check, and is the first requirement to give way if the checks conflict. The default zone is 0–100 m ahead, 10 m left and 10 m right, evaluated for one lamp.
 - **Cut-off as R149 measures it.** The cut-off is checked by the regulation's instrumental method: a vertical scan at 2.5° from V-V with G = log E(β) − log E(β + 0.1°). You set the sharpness G (default 0.25); the compliance table shows the measured G (0.13 to 0.40 for asymmetric beams, at least 0.13 or 0.08 for the symmetric classes) and the measured cut-off position.
 - **Aim tolerance** (optional, default 0). Give a tolerance in ±° vertical and ±° horizontal and the beam is solved to pass the ECE table with the lamp mis-aimed anywhere in that box; the compliance table then shows the worst margin in the box for each point. At 0 the beam is solved for nominal aim only. A Class B beam can pass up to about ±0.4° H with ±0.2° V; beyond that the cut-off shoulder reaches the 75R point.
+- **Physical limits** (optional, off by default). Tick "Apply physical limits" and give the aperture width and height (mm), the LED luminance (Mcd/m², default 70) and the optical efficiency (%, default 45). Luminance is conserved through any optic, so Imax is then held at or below LED luminance × aperture area (Mcd/m² × mm² = cd); the limit appears as a row in the compliance table. The summary also shows the LED flux needed (emitted flux ÷ efficiency), the smallest Lambertian emitting area that can supply it (LED flux ÷ (π × luminance)), and how much of the Imax limit is used. With the aperture left blank the limit is not applied and the summary shows the minimum lit aperture area the solved Imax needs. Unticked, the beam is calculated without any of these parameters.
 - **ECE compliance is enforced while solving.** The regulation test table for the selected class is a hard constraint; your parameters are soft targets. If a request cannot meet ECE, the tool shows the closest compliant result and reports requested against achieved values.
 - **Iso-candela view** in cd or lx at 25 m, with test points, zones, the cut-off line and the hot spot.
 - **Road illumination** for the lamp pair, top view with lane markings, using either *vertical planes on road* (the HSPR / GTB method, default) or *road surface* (horizontal plane) illuminance.
@@ -51,6 +52,7 @@ Paste a road-illuminate requirement set as it is (a list of checks), or wrap it 
   "evalHeight_m": 0,
   "road": { "laneWidth_m": 3.5 },
   "aimTolerance": { "v_deg": 0, "h_deg": 0 },
+  "physical": { "enabled": false, "aperture_mm": { "width": 60, "height": 30 }, "ledLuminance_Mcd_m2": 70, "efficiency_pct": 45 },
   "roadFlux": { "target_lm": null, "lamps": "one", "zone": { "x1": 0, "x2": 100, "left": 10, "right": 10 } },
   "checks": [
     { "label": "Ego lane 50 m", "type": "point", "x": 50, "y": 0, "op": ">=", "limit": 8 },
@@ -74,6 +76,7 @@ Paste a road-illuminate requirement set as it is (a list of checks), or wrap it 
 - `class` (optional): `B`, `CS`, `DS`, `ES` for the passing beam; `B`, `BS`, `CS`, `DSES` for the driving beam.
 - `targets` (optional) are soft goals: `imax`, `flux_lm`, `spreadH_deg`, `spreadV_deg`. Without `flux_lm` the solver returns the lowest-flux beam that passes.
 - `aimTolerance` (optional): `v_deg` and `h_deg`, the half-sizes of the aim box in degrees.
+- `physical` (optional): switches the physical limits on (unless `enabled` is `false`) and sets `aperture_mm` (`width`, `height`), `ledLuminance_Mcd_m2` and `efficiency_pct`.
 - `roadFlux` (optional): `target_lm` (a minimum flux on road in lm; `null` for none), `lamps` (`one` or `pair`), and `zone` with `x1`, `x2` (m ahead) and `left`, `right` (m, positive extents).
 
 Examples are in [`examples/`](examples).
@@ -113,7 +116,7 @@ ECE outranks the road checks throughout, and the best result over all stages is 
 
 ## Tests
 
-`npm test` (or `node tests/run.js`) runs the test suite: numerics, every class against its ECE table, the R149 cut-off, road requirement sets and repeatability across random seeds, and the aim box. `npm run bench` solves a fixed set of 12 cases and prints the metrics each change is judged on (`BS_AIM="0.4,0.2" npm run bench` solves them with an aim box); the `tests/bench-*.json` files hold the results before and after the changes in [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md).
+`npm test` (or `node tests/run.js`) runs the test suite: numerics, every class against its ECE table, the R149 cut-off, road requirement sets and repeatability across random seeds, the aim box and the physical limits. `npm run bench` solves a fixed set of 12 cases and prints the metrics each change is judged on (`BS_AIM="0.4,0.2" npm run bench` solves them with an aim box); the `tests/bench-*.json` files hold the results before and after the changes in [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md).
 
 ## Repository layout
 

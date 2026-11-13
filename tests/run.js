@@ -90,6 +90,21 @@ t("ECE passes across a ±0.2° V, ±0.4° H aim box when one is set (every class
   }
   return `±${AIM.v}° V, ±${AIM.h}° H`;
 });
+t("physical limits: Imax stays at or below LED luminance x aperture, and the LED flux follows the efficiency", () => {
+  const ph = { apW: 20, apH: 15, lum: 70, eff: 0.4 }, cap = 70 * 20 * 15;   // 21 000 cd
+  ok(C.physLimits(ph).imaxCap === cap, "limit is not luminance x area");
+  const out = [];
+  for (const o of [{ beam: "low", cls: "B", mode: "param" }, { beam: "low", cls: "B", mode: "road", checks: C.PRESET_ROAD.low.checks }]) {
+    const s = solve(Object.assign({ physical: ph }, o)), r = s.out.res;
+    ok(r.imax <= cap * 1.0005, `${o.mode}: Imax ${Math.round(r.imax)} cd is above the ${cap} cd limit`);
+    ok(r.pass, `${o.mode}: fails ` + r.rows.filter(x => x.pass === false).map(x => x.id).join(", "));
+    ok(Math.abs(r.phys.ledFlux - r.flux / 0.4) < 1e-6 && Math.abs(r.phys.minEmit - r.phys.ledFlux / (Math.PI * 70)) < 1e-6, "LED flux or emitting area is wrong");
+    out.push(`${o.mode} ${Math.round(r.imax)} cd`);
+  }
+  const free = base.out.res;
+  ok(!free.rows.some(x => x.kind === "phys") && free.phys == null, "physical limits must be off unless asked for");
+  return out.join(", ") + ` of ${cap} cd`;
+});
 t("road-illuminate format round-trips", () => {
   const a = C.normalizeChecks(cust), b = C.normalizeChecks(C.toRoadIlluminate(a));
   ok(JSON.stringify(a.map(x => [x.type, x.x, x.y, x.min, x.max])) === JSON.stringify(b.map(x => [x.type, x.x, x.y, x.min, x.max])), "checks changed");

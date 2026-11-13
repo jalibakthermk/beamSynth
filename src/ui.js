@@ -83,17 +83,41 @@ $("exLow").onclick = () => { $("roadJson").value = compactJSON(PRESET_ROAD.low);
 $("exHigh").onclick = () => { $("roadJson").value = compactJSON(PRESET_ROAD.high); syncFromJson(); };
 
 // Q as shown on the page: 0 = strong smile, 1 = "+" shape (the model's smile factor is 1 - Q)
+function physOut() {
+  const p = S.res.phys; if (!p) return null;
+  const r = (x, d) => x == null ? null : Math.round(x * 10 ** d) / 10 ** d;
+  return { aperture_mm: { width: p.apW, height: p.apH }, ledLuminance_Mcd_m2: p.lum, efficiency_pct: p.eff ? r(p.eff * 100, 1) : null,
+    ImaxLimit_cd: r(p.imaxCap, 0), ledFlux_lm: r(p.ledFlux, 0), minEmittingArea_mm2: r(p.minEmit, 2), minApertureAtImax_mm2: r(p.minAperture, 0) };
+}
+function physLines() {
+  const p = S.res.phys; if (!p) return [];
+  const o = [];
+  if (p.imaxCap) o.push(`[_APERTURE] ${p.apW} x ${p.apH} mm, LED luminance ${p.lum} Mcd/m2, Imax limit ${Math.round(p.imaxCap)} cd`);
+  if (p.ledFlux) o.push(`[_LEDFLUX] ${Math.round(p.ledFlux)} lm needed at ${Math.round(p.eff * 100)} % optical efficiency`);
+  return o;
+}
 function qOut() { return S.cfg && S.cfg.shape ? Math.round((1 - S.cfg.shape.smile) * 100) / 100 : 1; }
 // Beam function and class are common to both input modes. A requirement set that names them sets the selectors when it is loaded or edited.
 function syncFromJson() {
   let road; try { road = JSON.parse($("roadJson").value); } catch (e) { return; }
   if (!road || Array.isArray(road)) return;
+  // a "physical" block in the requirement set switches the physical limits on and fills them in
+  const ph = road.physical;
+  if (ph && typeof ph === "object") {
+    const ap = ph.aperture_mm || {};
+    if (ap.width !== undefined) $("apW").value = ap.width == null ? "" : ap.width;
+    if (ap.height !== undefined) $("apH").value = ap.height == null ? "" : ap.height;
+    if (ph.ledLuminance_Mcd_m2 > 0) $("ledL").value = ph.ledLuminance_Mcd_m2;
+    if (ph.efficiency_pct > 0) $("eff").value = ph.efficiency_pct;
+    $("physOn").checked = ph.enabled !== false; $("physBox").hidden = !$("physOn").checked;
+  }
   const fn = road.function === "low" || road.function === "high" ? road.function : S.beam;
   const cls = road.class && CLASSES[fn].some(c => c[0] === road.class) ? road.class : null;
   if (fn === S.beam && (!cls || cls === $("cls").value)) return;
   $("fn").value = fn; S.beam = fn; fillClasses(cls || undefined); setDefaults(); syncCut(); showTable();
 }
 $("roadJson").addEventListener("change", syncFromJson);
+$("physOn").addEventListener("change", () => { $("physBox").hidden = !$("physOn").checked; });
 function setMode(m) {
   S.mode = m; $("mRoad").setAttribute("aria-pressed", m === "road"); $("mParam").setAttribute("aria-pressed", m === "param");
   $("roadPanel").hidden = m !== "road"; $("paramPanel").hidden = m !== "param";
@@ -153,12 +177,16 @@ function gather() {
   const lane = (road && !isSet && road.road && road.road.laneWidth_m) || 3.5;
   const evalH = Math.max(0, num("evalH") || 0);
   const aim = { h: Math.min(2, Math.max(0, num("aimH") || 0)), v: Math.min(1, Math.max(0, num("aimV") || 0)) };
+  const effPct = num("eff"), physOn = $("physOn").checked;
+  const physical = physOn ? { apW: num("apW"), apH: num("apH"), lum: num("ledL"), eff: effPct ? Math.min(100, effPct) / 100 : null } : null;
+  if (physOn && (physical.apW > 0) !== (physical.apH > 0)) throw new Error("Physical limits: give both the aperture width and height, or leave both blank.");
+  if (physOn && (physical.apW > 0) && !(physical.lum > 0)) throw new Error("Physical limits: the LED luminance is needed to apply the aperture limit.");
   const shape = S.mode === "param" ? { smile: Math.min(1, Math.max(0, 1 - (+$("smile").value))), hot: targets.hot } : null;
   const rfZone = { x1: Math.max(0, num("rfX1") ?? 0), x2: num("rfX2") ?? 100, left: Math.abs(num("rfYL") ?? 10), right: Math.abs(num("rfYR") ?? 10) };
   if (!(rfZone.x2 > rfZone.x1) || !(rfZone.left + rfZone.right > 0)) throw new Error("Flux on road zone: 'to' must be beyond 'from', and the width must be more than 0.");
   const rfTarget = num("rfT");
   const roadFlux = { zone: rfZone, target: rfTarget && rfTarget > 0 ? rfTarget : null, lamps: $("rfL").value, height: H, spacing: sp, traffic: lht ? "LHT" : "RHT" };
-  return { beam: S.beam, cls: $("cls").value, key: tableKey(), sym, cut, table, lht, H, sp, checks, evalH, targets, roadFlux, shape, aim, lane, mode: S.mode };
+  return { beam: S.beam, cls: $("cls").value, key: tableKey(), sym, cut, table, lht, H, sp, checks, evalH, targets, roadFlux, shape, aim, physical, lane, mode: S.mode };
 }
 
 function generate() {
@@ -186,8 +214,11 @@ function generate() {
     const loopsTxt = "";
     const prefTxt = c.prefer === "flux" && !nf ? ` Lowest-flux beam: ${fmt(S.res.flux)} lm.` : "";
     const rfTxt = c.rfRelaxed && S.res.roadFlux < c.roadFlux.target ? ` Flux on road minimum relaxed (${fmt(S.res.roadFlux)} of ${fmt(c.roadFlux.target)} lm) so the road checks can pass.` : "";
+    const ph = S.res.phys, capRow = S.res.rows.find(r => r.kind === "phys");
+    const physTxt = capRow && capRow.pass === false ? ` Imax is above the aperture limit of ${fmt(ph.imaxCap)} cd (LED luminance × aperture area).`
+      : ph && ph.imaxRequested ? ` The requested ${fmt(ph.imaxRequested)} cd is above the aperture limit of ${fmt(ph.imaxCap)} cd (LED luminance × aperture area), so Imax is held at the limit.` : "";
     const leftTxt = c.leftOut && S.res.roadRows.some(r => r.pass === false && r.id === c.leftOut) ? ` Left out: “${c.leftOut}”, which conflicts with the other checks.` : "";
-    msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s${loopsTxt}. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : S.res.aimFailCount ? `ECE passes at nominal aim, but ${S.res.aimFailCount} check${S.res.aimFailCount > 1 ? "s fail" : " fails"} inside the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : S.res.aim ? `All ECE checks pass across the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : "All ECE checks pass.") + (c.mode !== "road" ? "" : nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : " All road checks pass.") + leftTxt + prefTxt + rfTxt, nf > 0 || S.res.aimFailCount > 0);
+    msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s${loopsTxt}. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : S.res.aimFailCount ? `ECE passes at nominal aim, but ${S.res.aimFailCount} check${S.res.aimFailCount > 1 ? "s fail" : " fails"} inside the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : S.res.aim ? `All ECE checks pass across the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : "All ECE checks pass.") + (c.mode !== "road" ? "" : nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : " All road checks pass.") + leftTxt + prefTxt + rfTxt + physTxt, nf > 0 || S.res.aimFailCount > 0);
     $("iesOut").value = "";
     renderAll();
   };
@@ -420,17 +451,28 @@ function req(r, unit) { const p = []; if (r.min != null) p.push("≥ " + (unit =
 function pillRoad(r) { return r.pass === false && S.cfg && S.cfg.leftOut === r.id ? '<span class="pill i" title="Left out: it conflicts with the other checks">LEFT OUT</span>' : pill(r.pass); }
 function pill(p) { return p === true ? '<span class="pill p">PASS</span>' : p === false ? '<span class="pill f">FAIL</span>' : '<span class="pill i">INFO</span>'; }
 
+// what the beam asks of the light source and the aperture
+function physTiles(p) {
+  if (!p) return "";
+  const led = p && p.ledFlux ? kv("LED flux", fmt(p.ledFlux) + " lm", `at ${fmt(p.eff * 100)} % efficiency` + (p.minEmit ? ` · emitting area ≥ ${fmt(p.minEmit, 1)} mm²` : "")) : kv("LED flux", "—", "set the optical efficiency");
+  const ap = !p || !p.lum ? kv("Min aperture", "—", "set the LED luminance")
+    : p.imaxCap ? kv("Imax limit", fmt(p.imaxCap) + " cd", `${fmt(p.lum)} Mcd/m² × ${fmt(p.area)} mm² · ${fmt(100 * p.apertureUsed)} % used`)
+    : kv("Min aperture", fmt(p.minAperture) + " mm²", `lit area needed for Imax at ${fmt(p.lum)} Mcd/m²`);
+  return led + ap;
+}
 function renderSummary() {
   const r = S.res, c = S.cfg, t = c.targets, nf = r.rows.filter(x => x.pass === false).length, n = r.rows.filter(x => x.pass != null).length;
   const nr = r.roadRows.filter(x => x.pass === false).length, nrt = r.roadRows.filter(x => x.pass != null).length;
   const asked = (v, d, u) => c.mode === "param" && v ? `requested ${fmt(v, d)}${u}` : "";
   const mir = c.lht ? -1 : 1;
   const r1 = reach(1), r3 = reach(3);
+  $("summary").classList.toggle("six", !!r.phys);
   $("summary").innerHTML =
     kv("ECE verdict", nf ? `${nf} of ${n} fail` : r.aimFailCount ? `${r.aimFailCount} fail in aim box` : `PASS ${n}/${n}`, (r.aim && !nf && !r.aimFailCount ? `aim ±${fmt(r.aim.v, 2)}° V, ±${fmt(r.aim.h, 2)}° H · ` : "") + `Class ${c.cls === "DSES" ? "DS / ES" : c.cls} ${c.beam === "low" ? "passing" : "driving"} beam`, "verdict " + (nf || r.aimFailCount ? "bad" : "ok")) +
-    kv("Road checks", nrt ? (nr ? `${nr} of ${nrt} missed` : `met ${nrt}/${nrt}`) : "none", c.mode === "road" ? "solved for" : "checked only", "verdict " + (nr ? "bad" : "ok")) +
+    kv("Road checks", nrt ? (r.phys ? `met ${nrt - nr}/${nrt}` : nr ? `${nr} of ${nrt} missed` : `met ${nrt}/${nrt}`) : "none", c.mode === "road" ? "solved for" : "checked only", "verdict " + (nr ? "bad" : "ok")) +
     kv("Imax", fmt(r.imax) + " cd", asked(t.imax, 0, " cd")) +
     kv("Flux", fmt(r.flux) + " lm", asked(t.flux, 0, " lm") || "emitted, one lamp") +
+    physTiles(r.phys) +
     kv("Flux on road", r.roadFlux == null ? "—" : fmt(r.roadFlux) + " lm", (r.roadFluxTarget ? `minimum ${fmt(r.roadFluxTarget)} lm · ` : "") + (c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair")) +
     kv("Road share", r.roadFlux == null || !r.flux ? "—" : fmt(100 * r.roadFlux / (r.flux * (c.roadFlux.lamps === "one" ? 1 : 2))) + " %", `of emitted flux, ${fmt(c.roadFlux.zone.x1)}–${fmt(c.roadFlux.zone.x2)} m, ${fmt(c.roadFlux.zone.left, 1)} L / ${fmt(c.roadFlux.zone.right, 1)} R`) +
     kv("H spread", "±" + fmt(r.sp.spreadH, 1) + "°", asked(t.spreadH, 1, "°") || `${angH(mir < 0 ? -r.sp.right : r.sp.left)} … ${angH(mir < 0 ? -r.sp.left : r.sp.right)}`) +
@@ -450,6 +492,7 @@ function renderTables() {
     S.res.rows.map(r => {
       if (r.kind === "G") return `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>scan at ${r.where}</td><td class="n">${r.max == null ? "≥ " + fmt(r.min, 2) : fmt(r.min, 2) + " to " + fmt(r.max, 2)}</td><td class="n">${fmt(r.val, 3)}</td><td class="n">${fmt(100 * r.margin, 0)} %</td>${hasAim ? '<td class="n aim"></td>' : ""}<td>${pill(r.pass)}</td></tr>`;
       if (r.kind === "cutpos") return `<tr><td class="id">${r.id}</td><td>scan at ${r.where}</td><td class="n">${angV(r.target)}</td><td class="n">${angV(r.val)}</td><td class="n"></td>${hasAim ? '<td class="n aim"></td>' : ""}<td>${pill(null)}</td></tr>`;
+      if (r.kind === "phys") return `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>luminance × area</td><td class="n">${req(r)}</td><td class="n">${fmtCd(r.val)}</td><td class="n">${fmt(100 * r.margin, 0)} %</td>${hasAim ? '<td class="n aim"></td>' : ""}<td>${pill(r.pass)}</td></tr>`;
       const pos = r.kind === "line" ? "line " + (r.min != null ? "min" : "max") : r.zone ? "zone " + (r.min != null ? "min" : "max") : r.kind === "sum" ? "sum" : r.h != null ? `${angH(mir * r.h)} ${angV(r.v)}` : "global";
       return `<tr class="${r.pass === false || r.aimPass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>${pos}</td><td class="n">${req(r)}</td><td class="n">${fmtCd(r.val)}</td><td class="n">${r.margin == null ? "" : fmt(100 * r.margin, 0) + " %"}</td>${aimCell(r)}<td>${pillEce(r)}</td></tr>`;
     }).join("") + "</tbody>";
@@ -481,7 +524,22 @@ function recomputeRoad() {
   S.res.roadRows = rd.map(rc => roadRow(rc, checkValue(S.P, rc)));
 }
 
-function renderAll() { if (!S.res) return; recomputeRoad(); renderSummary(); renderTables(); setCount("ecCount", S.res.rows); setCount("rdCount", S.res.roadRows); drawIso(); drawRoad(); }
+// Held back by: for every unmet target and failed check, the checks that oppose it
+function renderBlocking() {
+  const list = (S.res.blocking || []), c = S.cfg, mir = c.lht ? -1 : 1;
+  $("foldBlk").hidden = !list.length;
+  const val = (m, x) => m.unit === "pos" ? `${angH(mir * x.h)} ${angV(x.v)}` : m.unit === "G" ? fmt(x, 3) : m.unit === "°" ? fmt(x, 1) + "°" : m.unit === "lx" ? fmt(x, 2) + " lx" : fmt(x, m.unit === "m" ? 1 : 0) + " " + m.unit;
+  const esc = s => String(s).replace(/[&<>]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch]));
+  $("blkList").innerHTML = list.map(m => {
+    const head = m.check ? (m.asked != null ? `${val(m, m.got)}, ${m.limit === "max" ? "limit" : "needs"} ${val(m, m.asked)}` : val(m, m.got)) : `${val(m, m.got)}, requested ${val(m, m.asked)}`;
+    const left = c.leftOut && m.what === "Road check “" + c.leftOut + "”";
+    const names = m.by.map(b => esc(b.label)).join(", ");
+    const why = !m.by.length ? (left ? "left out: it conflicts with the other checks as a whole" : "no single check stands out; the beam model cannot reach it together with the rest")
+      : (left ? "left out; " : "") + (m.weak ? "mainly " : "held back by ") + `<b>${names}</b>`;
+    return `<li><b>${esc(m.what)}</b> <span>${head}</span><br>${why.charAt(0).toUpperCase() + why.slice(1)}</li>`;
+  }).join("");
+}
+function renderAll() { if (!S.res) return; recomputeRoad(); renderSummary(); renderBlocking(); renderTables(); setCount("ecCount", S.res.rows); setCount("rdCount", S.res.roadRows); drawIso(); drawRoad(); }
 ["isoUnit", "isoRange", "isoPts"].forEach(id => $(id).addEventListener("change", () => S.res && drawIso()));
 ["roadRange", "roadPts"].forEach(id => $(id).addEventListener("change", () => S.res && drawRoad()));
 $("plane").addEventListener("change", () => S.res && renderAll());
@@ -505,6 +563,7 @@ function buildIES() {
     `[_ROADFLUX] ${Math.round(S.res.roadFlux)} lm, ${c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair"}, ${c.roadFlux.zone.x1}-${c.roadFlux.zone.x2} m, ${c.roadFlux.zone.left} m L / ${c.roadFlux.zone.right} m R`,
     ...(c.shape ? [`[_QFACTOR] ${qOut()}`] : []),
     ...(S.res.G ? [`[_CUTOFF] G ${S.res.G.toFixed(3)} at 2.5 deg, cut-off at ${Math.abs(S.res.cutPos).toFixed(2)} deg D`] : []),
+    ...physLines(),
     ...(S.res.aim ? [`[_AIMBOX] passes ECE within +/-${S.res.aim.v} deg V, +/-${S.res.aim.h} deg H: ${S.res.aimFailCount ? "no" : "yes"}`] : []),
     `[_MODEL] ${S.P.model === "hybrid" ? "hybrid: square-root core + lobes" : S.P.model === "sqrt" ? "square-root fall-off" : "Gaussian lobes"}`,
     `[_GENERATED] ${new Date().toISOString().slice(0, 10)}`,
@@ -550,7 +609,7 @@ $("paramCopy").onclick = () => {
       core: { law: "I = A * exp(-k * (sqrt(rho + eps) - sqrt(eps))), rho = 1 at 5 % of A", A_cd: Math.round(P.A), centre_deg: { h: r2(P.h0), v: r2(P.v0) },
         extent_deg: { left: r2(P.Rl), right: r2(P.Rr), down: r2(P.Rd), up: r2(P.Ru) }, k: r2(P.kn), eps: r2(P.eps) },
       lobes: P.lobes.map((c, i) => ({ name: ["spread", "foreground"][i], A_cd: Math.round(c.A), h_deg: r2(c.h), v_deg: r2(c.v), sigmaH_deg: r2(c.sh), sigmaV_deg: r2(c.sv) })),
-      qFactor: qOut(), glareFloor_cd: S.cfg.beam === "low" ? Math.round(P.sigA) : 0 };
+      physical: physOut(), qFactor: qOut(), glareFloor_cd: S.cfg.beam === "low" ? Math.round(P.sigA) : 0 };
     const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy")); return;
   }
   if (S.P.model === "sqrt") {
@@ -559,14 +618,14 @@ $("paramCopy").onclick = () => {
       law: "I = Imax * exp(-k * (sqrt(rho + eps) - sqrt(eps))), rho = 1 at the 5 % isoline", note: "Internal frame is RHT; LHT mirrors H.",
       cutoff: S.cfg.beam === "low" ? S.cfg.cut : null, Imax_cd: Math.round(P.A), centre_deg: { h: r2(P.h0), v: r2(P.v0) },
       extent_5pct_deg: { left: r2(P.Rl), right: r2(P.Rr), down: r2(P.Rd), up: r2(P.Ru) }, k: r2(P.kn), eps: r2(P.eps),
-      qFactor: qOut(), glareFloor_cd: S.cfg.beam === "low" ? Math.round(P.sigA) : 0 };
+      physical: physOut(), qFactor: qOut(), glareFloor_cd: S.cfg.beam === "low" ? Math.round(P.sigA) : 0 };
     const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy")); return;
   }
   const r2 = x => Math.round(x * 1000) / 1000;
   const o = { function: S.cfg.beam, class: S.cfg.cls, traffic: S.cfg.lht ? "LHT" : "RHT", note: "Internal frame is RHT; LHT mirrors H.", cutoff: S.cfg.beam === "low" ? S.cfg.cut : null,
     lobes: S.P.comps.map((c, i) => ({ name: ["hot spot", "spread", "foreground"][i], A_cd: Math.round(c.A), h_deg: r2(c.h), v_deg: r2(c.v), sigmaH_deg: r2(c.sh), sigmaV_deg: r2(c.sv) })),
     roadFlux: { value_lm: Math.round(S.res.roadFlux), target_lm: S.res.roadFluxTarget, lamps: S.cfg.roadFlux.lamps, zone: S.cfg.roadFlux.zone },
-    qFactor: qOut(),
+    physical: physOut(), qFactor: qOut(),
     glareFloor_cd: S.cfg.beam === "low" ? Math.round(S.P.sigA) : 0 };
   const txt = JSON.stringify(o, null, 2); $("iesOut").value = txt; copy(txt, $("paramCopy"));
 };
