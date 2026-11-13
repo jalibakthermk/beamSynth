@@ -36,21 +36,19 @@ function showTable() { const k = tableKey(); $("tableJson").value = tableFor(k);
 $("tableJson").addEventListener("input", () => { S.tables[tableKey()] = $("tableJson").value; });
 $("tableReset").onclick = () => { const k = tableKey(); S.tables[k] = compactJSON(PRESET_TABLES[k].points); showTable(); };
 
-const PARAM_DEFAULTS = { low: { imax: 30000, flux: 800, sph: 14, spv: 4 }, low_sym: { imax: 18000, flux: 700, sph: 16, spv: 4 }, low_CS: { imax: 18000, flux: 400, sph: 16, spv: 4 },
-  high: { imax: 90000, flux: 1200, sph: 12, spv: 6 }, high_sym: { imax: 60000, flux: 800, sph: 12, spv: 6 } };
-function setRoadFluxDefault() { $("rfT").value = roadFluxDefault(S.beam, $("cls").value); }
+function setRoadFluxDefault() { /* no default: flux on road is an optional minimum */ }
 function setDefaults() {
   setRoadFluxDefault();
   const cls = $("cls").value;
-  const d = PARAM_DEFAULTS[S.beam + "_" + cls] || PARAM_DEFAULTS[S.beam + (cls === "B" ? "" : "_sym")];
+  const d = paramDefaults(S.beam, cls);
   $("imax").value = d.imax; $("flux").value = d.flux; $("sph").value = d.sph; $("spv").value = d.spv;
   setHotDefault();
 }
 // default hot spot: 75R / 75L (Class B), 0.86D-V (symmetric classes), H-V (high beam)
 function setHotDefault() {
   const cls = $("cls").value, lht = $("traffic").value === "LHT";
-  const hot = S.beam === "high" ? [0, 0] : cls === "B" ? [lht ? -1.15 : 1.15, -0.57] : [0, -0.86];
-  $("hotH").value = hot[0]; $("hotV").value = hot[1];
+  const hot = hotDefault(S.beam, cls, lht);
+  $("hotH").value = hot.h; $("hotV").value = hot.v;
 }
 $("traffic").addEventListener("change", setHotDefault);
 $("smile").addEventListener("input", () => { $("smileVal").textContent = (+$("smile").value).toFixed(2); });
@@ -116,8 +114,11 @@ function gather() {
   let table;
   try { table = JSON.parse(tableFor(tableKey())); if (!Array.isArray(table)) throw new Error("expected an array"); } catch (e) { throw new Error("Test table: " + e.message); }
   const sym = isSym(), elbow = num("cElbow") ?? -0.57;
-  const cut = sym ? { elbow, angle: 0, cap: elbow, sharp: Math.max(0.02, num("cSharp") ?? 0.08), sym: true }
-    : { elbow, angle: num("cAngle") ?? 15, cap: num("cCap") ?? 0.5, sharp: Math.max(0.02, num("cSharp") ?? 0.08) };
+  const gIn = num("cG") ?? G_DEFAULT;
+  if (S.beam === "low" && (gIn < 0.08 || gIn > 0.40)) throw new Error("Cut-off sharpness G must be between 0.08 and 0.40 (R149 allows 0.13 to 0.40 for asymmetric beams).");
+  const sharp = widthForG(gIn, 1.9);
+  const cut = sym ? { elbow, angle: 0, cap: elbow, sharp, G: gIn, off: 0, sym: true }
+    : { elbow, angle: num("cAngle") ?? 15, cap: num("cCap") ?? 0.5, sharp, G: gIn, off: 0 };
   const lht = $("traffic").value === "LHT";
   const H = num("mh") || 0.65, sp = num("sp") || 1.4;
   const isSet = Array.isArray(road);                       // bare road-illuminate requirement set
@@ -153,31 +154,27 @@ function generate() {
   try { c = gather(); } catch (e) { msg(e.message, true); return; }
   S.busy = true; $("go").disabled = true; msg("Solving…");
   const t0 = performance.now();
-  const ctx = buildContext({ beam: c.beam, cut: c.cut, table: c.table,
-    road: { checks: c.checks, height: c.H, spacing: c.sp, plane: $("plane").value, traffic: c.lht ? "LHT" : "RHT", evalH: c.evalH },
-    useRoad: c.mode === "road", targets: c.targets, roadFlux: c.roadFlux, shape: c.shape });
+  c.plane = $("plane").value;
   c.model = (document.querySelector('input[name="model"]:checked') || {}).value || "hybrid";
-  const hy = c.model === "hybrid", sq = c.model === "sqrt" || hy, dec = hy ? decodeY : decodeS;
-  if (hy) ctx.homogW = 2;
-  const iters = sq ? 1500 : 2400;
-  const solver = sq ? makeLoopSolverS(ctx, hy ? initHybrid(c.beam, c.cut, c.targets, c.shape) : initSqrt(c.beam, c.cut, c.targets, c.shape), { dec, first: hy ? 1200 : 1500 })
-    : makeSolver(ctx, encode(initPhysical(c.beam, c.targets, c.cut), c.beam), iters);
+  const job = createJob(c);
   let shownLoop = 0;
   const tick = () => {
-    const done = solver.run(60);
-    $("progBar").style.width = (100 * solver.it / solver.iters) + "%";
-    if (sq && solver.loop !== shownLoop && !done) { shownLoop = solver.loop; msg(solver.loop === 1 ? "Solving…" : `Loop ${solver.loop} of ${solver.maxLoops}: working on the checks still missed…`); }
+    const done = job.run(60);
+    $("progBar").style.width = (100 * job.it / job.iters) + "%";
+    const stageKey = job.stage === "calibrate" ? "cal" + job.cal : job.phase === "flux" ? "flux" + job.refine : job.loop;
+    if (stageKey !== shownLoop && !done) { shownLoop = stageKey; msg(job.stage === "calibrate" ? "Calibrating the cut-off to the R149 scan…" : job.phase === "flux" ? `All checks pass. Reducing flux, round ${job.refine}…` : job.loop === 1 ? "Finding a beam that passes…" : `Loop ${job.loop} of ${job.maxLoops}: working on the checks still missed…`); }
     if (!done) { setTimeout(tick, 0); return; }
-    c.loops = sq ? solver.cands.length : 1;
-    c.leftOut = sq && solver.leftOut && solver.result && solver.result.miss ? solver.leftOut : null;
-    S.P = sq ? dec(solver.best, c.beam, c.cut, c.shape) : decode(solver.best, c.beam, c.cut, c.shape); S.cfg = c;
-    S.res = evaluate(S.P, Object.assign({}, ctx, { useRoad: true }), true);
-    S.ctx = ctx;
+    const out = job.result();
+    c.loops = out.loops; c.leftOut = out.leftOut; c.prefer = out.prefer; c.rfRelaxed = out.rfRelaxed;
+    if (out.cut) c.cut = out.cut;   // calibrated cut-off (width and offset)
+    S.P = out.P; S.cfg = c; S.res = out.res; S.ctx = out.ctx;
     S.busy = false; $("go").disabled = false;
     const nf = S.res.rows.filter(r => r.pass === false).length, nr = S.res.roadRows.filter(r => r.pass === false).length;
-    const loopsTxt = c.loops > 1 ? ` after ${c.loops} loops` : "";
+    const loopsTxt = "";
+    const prefTxt = c.prefer === "flux" && !nf ? ` Lowest-flux beam: ${fmt(S.res.flux)} lm.` : "";
+    const rfTxt = c.rfRelaxed && S.res.roadFlux < c.roadFlux.target ? ` Flux on road minimum relaxed (${fmt(S.res.roadFlux)} of ${fmt(c.roadFlux.target)} lm) so the road checks can pass.` : "";
     const leftTxt = c.leftOut && S.res.roadRows.some(r => r.pass === false && r.id === c.leftOut) ? ` Left out: “${c.leftOut}”, which conflicts with the other checks.` : "";
-    msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s${loopsTxt}. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : "All ECE checks pass.") + (nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : " All road checks pass.") + leftTxt, nf > 0);
+    msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s${loopsTxt}. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : "All ECE checks pass.") + (nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : " All road checks pass.") + leftTxt + prefTxt + rfTxt, nf > 0);
     $("iesOut").value = "";
     renderAll();
   };
@@ -421,7 +418,7 @@ function renderSummary() {
     kv("Road checks", nrt ? (nr ? `${nr} of ${nrt} missed` : `met ${nrt}/${nrt}`) : "none", c.mode === "road" ? "solved for" : "checked only", "verdict " + (nr ? "bad" : "ok")) +
     kv("Imax", fmt(r.imax) + " cd", asked(t.imax, 0, " cd")) +
     kv("Flux", fmt(r.flux) + " lm", asked(t.flux, 0, " lm") || "emitted, one lamp") +
-    kv("Flux on road", r.roadFlux == null ? "—" : fmt(r.roadFlux) + " lm", (r.roadFluxTarget ? `target ${fmt(r.roadFluxTarget)} lm · ` : "") + (c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair")) +
+    kv("Flux on road", r.roadFlux == null ? "—" : fmt(r.roadFlux) + " lm", (r.roadFluxTarget ? `minimum ${fmt(r.roadFluxTarget)} lm · ` : "") + (c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair")) +
     kv("Road share", r.roadFlux == null || !r.flux ? "—" : fmt(100 * r.roadFlux / (r.flux * (c.roadFlux.lamps === "one" ? 1 : 2))) + " %", `of emitted flux, ${fmt(c.roadFlux.zone.x1)}–${fmt(c.roadFlux.zone.x2)} m, ${fmt(c.roadFlux.zone.left, 1)} L / ${fmt(c.roadFlux.zone.right, 1)} R`) +
     kv("H spread", "±" + fmt(r.sp.spreadH, 1) + "°", asked(t.spreadH, 1, "°") || `${angH(mir < 0 ? -r.sp.right : r.sp.left)} … ${angH(mir < 0 ? -r.sp.left : r.sp.right)}`) +
     kv("V spread", fmt(r.sp.spreadV, 1) + "°", asked(t.spreadV, 1, "°")) +
@@ -432,9 +429,11 @@ function renderSummary() {
 
 function renderTables() {
   const mir = S.cfg.lht ? -1 : 1;
-  $("tblName").textContent = PRESET_TABLES[S.cfg.key].name;
-  $("ecTbl").innerHTML = "<thead><tr><th>Point</th><th>Position</th><th>Requirement (cd)</th><th>Value (cd)</th><th>Margin</th><th></th></tr></thead><tbody>" +
+  $("tblName").textContent = PRESET_TABLES[S.cfg.key].name + " · values in cd";
+  $("ecTbl").innerHTML = "<thead><tr><th>Point</th><th>Position</th><th>Requirement</th><th>Value</th><th>Margin</th><th></th></tr></thead><tbody>" +
     S.res.rows.map(r => {
+      if (r.kind === "G") return `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>scan at ${r.where}</td><td class="n">${r.max == null ? "≥ " + fmt(r.min, 2) : fmt(r.min, 2) + " to " + fmt(r.max, 2)}</td><td class="n">${fmt(r.val, 3)}</td><td class="n">${fmt(100 * r.margin, 0)} %</td><td>${pill(r.pass)}</td></tr>`;
+      if (r.kind === "cutpos") return `<tr><td class="id">${r.id}</td><td>scan at ${r.where}</td><td class="n">${angV(r.target)}</td><td class="n">${angV(r.val)}</td><td class="n"></td><td>${pill(null)}</td></tr>`;
       const pos = r.kind === "line" ? "line " + (r.min != null ? "min" : "max") : r.zone ? "zone " + (r.min != null ? "min" : "max") : r.kind === "sum" ? "sum" : r.h != null ? `${angH(mir * r.h)} ${angV(r.v)}` : "global";
       return `<tr class="${r.pass === false ? "fail" : ""}"><td class="id">${r.id}</td><td>${pos}</td><td class="n">${req(r)}</td><td class="n">${fmtCd(r.val)}</td><td class="n">${r.margin == null ? "" : fmt(100 * r.margin, 0) + " %"}</td><td>${pill(r.pass)}</td></tr>`;
     }).join("") + "</tbody>";
@@ -489,6 +488,7 @@ function buildIES() {
     `[_IMAX] ${Math.round(S.res.imax)} cd`, `[_FLUX] ${Math.round(S.res.flux)} lm`,
     `[_ROADFLUX] ${Math.round(S.res.roadFlux)} lm, ${c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair"}, ${c.roadFlux.zone.x1}-${c.roadFlux.zone.x2} m, ${c.roadFlux.zone.left} m L / ${c.roadFlux.zone.right} m R`,
     ...(c.shape ? [`[_QFACTOR] ${c.shape.smile}`] : []),
+    ...(S.res.G ? [`[_CUTOFF] G ${S.res.G.toFixed(3)} at 2.5 deg, cut-off at ${Math.abs(S.res.cutPos).toFixed(2)} deg D`] : []),
     `[_MODEL] ${S.P.model === "hybrid" ? "hybrid: square-root core + lobes" : S.P.model === "sqrt" ? "square-root fall-off" : "Gaussian lobes"}`,
     `[_GENERATED] ${new Date().toISOString().slice(0, 10)}`,
     "TILT=NONE",

@@ -10,11 +10,8 @@
   "road": {
     "laneWidth_m": 3.5
   },
-  "targets": {
-    "flux_lm": 1200
-  },
   "roadFlux": {
-    "target_lm": 600,
+    "target_lm": null,
     "lamps": "one",
     "zone": {
       "x1": 0,

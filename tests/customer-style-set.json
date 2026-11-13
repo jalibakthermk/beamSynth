@@ -1,0 +1,155 @@
+[
+ {
+  "label": "Range at 3 lx, minimum 70 m",
+  "type": "range",
+  "y": 0,
+  "thr": 3,
+  "op": ">=",
+  "limit": 70
+ },
+ {
+  "label": "15-24 m, 6 m both sides",
+  "type": "zone",
+  "x1": 15,
+  "x2": 24,
+  "y1": 6,
+  "y2": -6,
+  "stat": "min",
+  "op": ">=",
+  "limit": 4
+ },
+ {
+  "label": "24-36 m, 3 m both sides",
+  "type": "zone",
+  "x1": 24,
+  "x2": 36,
+  "y1": 3,
+  "y2": -3,
+  "stat": "min",
+  "op": ">=",
+  "limit": 6
+ },
+ {
+  "label": "30-70 m at 9 m LH side",
+  "type": "zone",
+  "x1": 30,
+  "x2": 70,
+  "y1": 9,
+  "y2": 7,
+  "stat": "max",
+  "op": "<=",
+  "limit": 4
+ },
+ {
+  "label": "45-60 m at 9 m RH side",
+  "type": "zone",
+  "x1": 45,
+  "x2": 60,
+  "y1": -7,
+  "y2": -9,
+  "stat": "min",
+  "op": ">=",
+  "limit": 1.5
+ },
+ {
+  "label": "Width at 25 m, 3 lx",
+  "type": "width",
+  "x": 25,
+  "thr": 3,
+  "op": ">=",
+  "limit": 14
+ },
+ {
+  "label": "Average 6 m LH and RH, up to 40 m",
+  "type": "zone",
+  "x1": 3,
+  "x2": 40,
+  "y1": 6,
+  "y2": -6,
+  "stat": "avg",
+  "op": ">=",
+  "limit": 8
+ },
+ {
+  "label": "Average 6 m LH and RH, 40-60 m",
+  "type": "zone",
+  "x1": 40,
+  "x2": 60,
+  "y1": 6,
+  "y2": -6,
+  "stat": "avg",
+  "op": ">=",
+  "limit": 3
+ },
+ {
+  "label": "Average 6 m LH and RH, beyond 60 m",
+  "type": "zone",
+  "x1": 60,
+  "x2": 100,
+  "y1": 6,
+  "y2": -6,
+  "stat": "avg",
+  "op": ">=",
+  "limit": 1
+ },
+ {
+  "label": "Chart: 3-12 m, centre +-3 m",
+  "type": "zone",
+  "x1": 3,
+  "x2": 12,
+  "y1": 3,
+  "y2": -3,
+  "stat": "max",
+  "op": "<=",
+  "limit": 40
+ },
+ {
+  "label": "Chart: 6-12 m at 6 m RH",
+  "type": "zone",
+  "x1": 6,
+  "x2": 12,
+  "y1": -5.5,
+  "y2": -6.5,
+  "stat": "min",
+  "op": ">=",
+  "limit": 2
+ },
+ {
+  "label": "Chart: 6-12 m at 6 m LH",
+  "type": "zone",
+  "x1": 6,
+  "x2": 12,
+  "y1": 5.5,
+  "y2": 6.5,
+  "stat": "min",
+  "op": ">=",
+  "limit": 2
+ },
+ {
+  "label": "Chart: 12-36 m at 9 m RH",
+  "type": "zone",
+  "x1": 12,
+  "x2": 36,
+  "y1": -8.5,
+  "y2": -9.5,
+  "stat": "min",
+  "op": ">=",
+  "limit": 1
+ },
+ {
+  "label": "Point 12 m, centre",
+  "type": "point",
+  "x": 12,
+  "y": 0,
+  "op": ">=",
+  "limit": 8
+ },
+ {
+  "label": "Point 18 m, 3 m RH",
+  "type": "point",
+  "x": 18,
+  "y": -3,
+  "op": ">=",
+  "limit": 8
+ }
+]

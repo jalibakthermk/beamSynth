@@ -226,7 +226,7 @@ footer a:hover{color:var(--ink)}
   <fieldset>
     <p class="lab">Flux on road</p>
     <div class="row2">
-      <label class="f">Target (lm)<input id="rfT" type="number" step="10" min="0" value="600"><small>blank = report only</small></label>
+      <label class="f">Minimum (lm)<input id="rfT" type="number" step="10" min="0" value="" placeholder="none"><small>blank = no minimum</small></label>
       <label class="f">Evaluate for<select id="rfL"><option value="one">One lamp</option><option value="pair">Lamp pair</option></select></label>
     </div>
     <div class="row2">
@@ -237,7 +237,7 @@ footer a:hover{color:var(--ink)}
       <label class="f">Width left (m)<input id="rfYL" type="number" step="0.5" min="0" value="10"></label>
       <label class="f">Width right (m)<input id="rfYR" type="number" step="0.5" min="0" value="10"></label>
     </div>
-    <p class="note">Luminous flux reaching the road surface inside this rectangle, measured from the lamps. Default target: 600 lm (Class B, DS, ES and high beam), 300 lm (Class CS).</p>
+    <p class="note">Luminous flux reaching the road surface inside this rectangle, measured from the lamps. Leave the minimum blank to get the least flux that meets the requirements; set it only when a minimum flux on road is required.</p>
   </fieldset>
 
   <details id="cutBox">
@@ -249,9 +249,9 @@ footer a:hover{color:var(--ink)}
       </div>
       <div class="row2">
         <label class="f">Shoulder top V (°)<input id="cCap" type="number" step="0.05" value="0.5"></label>
-        <label class="f">Gradient width (°)<input id="cSharp" type="number" step="0.01" value="0.08"></label>
+        <label class="f">Sharpness G<input id="cG" type="number" step="0.01" min="0.08" max="0.40" value="0.25"><small>R149: 0.13 to 0.40</small></label>
       </div>
-      <p class="note">Elbow on the V-V line. Gradient width sets cut-off sharpness (logistic scale). Symmetric classes use a flat cut-off, so shoulder angle and top are fixed.</p>
+      <p class="note">Elbow on the V-V line. G is the cut-off sharpness as R149 measures it: G = log E(β) − log E(β + 0.1°) on a vertical scan at 2.5°. The tool calibrates the cut-off so its steepest point sits on the elbow line. Symmetric classes use a flat cut-off, so shoulder angle and top are fixed.</p>
     </div>
   </details>
 

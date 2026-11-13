@@ -1,0 +1,386 @@
+{
+ "param low B": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 33749,
+  "flux": 693,
+  "roadFlux": 599,
+  "spreadH": 14.8,
+  "spreadV": 5.5,
+  "hot": [
+   1.2,
+   -0.52
+  ],
+  "loops": 1,
+  "G": 0.465,
+  "cutPos": -0.38,
+  "aimFails": 3,
+  "aimDetail": {
+   "H-0.5 V0": [
+    "50L"
+   ],
+   "H-0.5 V0.2": [
+    "75L",
+    "50L"
+   ],
+   "H0 V0.2": [
+    "75L"
+   ]
+  },
+  "sec": 4.9
+ },
+ "param low CS": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 19946,
+  "flux": 341,
+  "roadFlux": 305,
+  "spreadH": 16.7,
+  "spreadV": 5.6,
+  "hot": [
+   0,
+   -0.83
+  ],
+  "loops": 1,
+  "G": 0.424,
+  "cutPos": -0.42,
+  "aimFails": 4,
+  "aimDetail": {
+   "H-0.5 V0": [
+    "3 (3.5L)"
+   ],
+   "H-0.5 V0.2": [
+    "3 (3.5L)"
+   ],
+   "H0.5 V0": [
+    "1 (3.5R)"
+   ],
+   "H0.5 V0.2": [
+    "1 (3.5R)"
+   ]
+  },
+  "sec": 5.4
+ },
+ "param low DS": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 21785,
+  "flux": 564,
+  "roadFlux": 530,
+  "spreadH": 17.3,
+  "spreadV": 7.3,
+  "hot": [
+   0,
+   -0.83
+  ],
+  "loops": 1,
+  "G": 0.444,
+  "cutPos": -0.42,
+  "aimFails": 5,
+  "aimDetail": {
+   "H-0.5 V0": [
+    "3 (3.5L)"
+   ],
+   "H-0.5 V0.2": [
+    "3 (3.5L)"
+   ],
+   "H0 V0.2": [
+    "1 (3.5R)",
+    "3 (3.5L)"
+   ],
+   "H0.5 V0": [
+    "1 (3.5R)"
+   ],
+   "H0.5 V0.2": [
+    "1 (3.5R)"
+   ]
+  },
+  "sec": 5.8
+ },
+ "param low ES": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 20997,
+  "flux": 522,
+  "roadFlux": 494,
+  "spreadH": 17.6,
+  "spreadV": 7.2,
+  "hot": [
+   0,
+   -0.83
+  ],
+  "loops": 1,
+  "G": 0.458,
+  "cutPos": -0.41,
+  "aimFails": 5,
+  "aimDetail": {
+   "H-0.5 V0": [
+    "3 (3.5L)"
+   ],
+   "H-0.5 V0.2": [
+    "3 (3.5L)"
+   ],
+   "H0 V0.2": [
+    "1 (3.5R)",
+    "3 (3.5L)"
+   ],
+   "H0.5 V0": [
+    "1 (3.5R)"
+   ],
+   "H0.5 V0.2": [
+    "1 (3.5R)"
+   ]
+  },
+  "sec": 5
+ },
+ "param high B": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 97966,
+  "flux": 1199,
+  "roadFlux": 581,
+  "spreadH": 11.4,
+  "spreadV": 6,
+  "hot": [
+   -0.15,
+   0.13
+  ],
+  "loops": 1,
+  "aimFails": 5,
+  "aimDetail": {
+   "H-0.5 V0": [
+    "HV"
+   ],
+   "H-0.5 V0.2": [
+    "HV"
+   ],
+   "H0 V0.2": [
+    "HV"
+   ],
+   "H0.5 V0": [
+    "HV"
+   ],
+   "H0.5 V0.2": [
+    "HV"
+   ]
+  },
+  "sec": 5.8
+ },
+ "param high BS": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 69128,
+  "flux": 828,
+  "roadFlux": 548,
+  "spreadH": 11.1,
+  "spreadV": 5.9,
+  "hot": [
+   -0.1,
+   0.18
+  ],
+  "loops": 1,
+  "aimFails": 0,
+  "aimDetail": {},
+  "sec": 5.6
+ },
+ "param high DSES": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 69677,
+  "flux": 838,
+  "roadFlux": 536,
+  "spreadH": 11,
+  "spreadV": 6.4,
+  "hot": [
+   -0.05,
+   0.18
+  ],
+  "loops": 1,
+  "aimFails": 5,
+  "aimDetail": {
+   "H-0.5 V-0.2": [
+    "2U-V"
+   ],
+   "H0 V-0.2": [
+    "2U-V"
+   ],
+   "H0.5 V-0.2": [
+    "H-2.5L",
+    "H-9L",
+    "2U-V"
+   ],
+   "H0.5 V0": [
+    "H-2.5L",
+    "H-9L"
+   ],
+   "H0.5 V0.2": [
+    "H-2.5L",
+    "H-9L"
+   ]
+  },
+  "sec": 5.3
+ },
+ "param low B LHT": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 33749,
+  "flux": 693,
+  "roadFlux": 599,
+  "spreadH": 14.8,
+  "spreadV": 5.5,
+  "hot": [
+   1.2,
+   -0.52
+  ],
+  "loops": 1,
+  "G": 0.465,
+  "cutPos": -0.38,
+  "aimFails": 3,
+  "aimDetail": {
+   "H-0.5 V0": [
+    "50L"
+   ],
+   "H-0.5 V0.2": [
+    "75L",
+    "50L"
+   ],
+   "H0 V0.2": [
+    "75L"
+   ]
+  },
+  "sec": 6.4
+ },
+ "road example low B": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 33934,
+  "flux": 792,
+  "roadFlux": 606,
+  "spreadH": 36,
+  "spreadV": 6.7,
+  "hot": [
+   1.15,
+   -0.55
+  ],
+  "loops": 1,
+  "G": 0.466,
+  "cutPos": -0.37,
+  "aimFails": 4,
+  "aimDetail": {
+   "H-0.5 V0": [
+    "50L"
+   ],
+   "H-0.5 V0.2": [
+    "75L"
+   ],
+   "H0 V0.2": [
+    "75L"
+   ],
+   "H0.5 V0.2": [
+    "75L"
+   ]
+  },
+  "sec": 7.4
+ },
+ "road example high": {
+  "ece": [
+   "HV"
+  ],
+  "roadMiss": [
+   "Centre 100 m"
+  ],
+  "imax": 113753,
+  "flux": 1200,
+  "roadFlux": 542,
+  "spreadH": 15.9,
+  "spreadV": 5.8,
+  "hot": [
+   0.05,
+   0.32
+  ],
+  "loops": 1,
+  "aimFails": 6,
+  "aimDetail": {
+   "H-0.5 V0": [
+    "HV"
+   ],
+   "H-0.5 V0.2": [
+    "HV"
+   ],
+   "H0 V0": [
+    "HV"
+   ],
+   "H0 V0.2": [
+    "HV"
+   ],
+   "H0.5 V0": [
+    "HV"
+   ],
+   "H0.5 V0.2": [
+    "HV"
+   ]
+  },
+  "sec": 6
+ },
+ "road customer B": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 68625,
+  "flux": 491,
+  "roadFlux": 362,
+  "spreadH": 11,
+  "spreadV": 2.9,
+  "hot": [
+   1.2,
+   -0.6
+  ],
+  "loops": 1,
+  "G": 0.443,
+  "cutPos": -0.39,
+  "aimFails": 1,
+  "aimDetail": {
+   "H-0.5 V0.2": [
+    "75L"
+   ]
+  },
+  "sec": 5.6
+ },
+ "road customer ES": {
+  "ece": [],
+  "roadMiss": [],
+  "imax": 23781,
+  "flux": 294,
+  "roadFlux": 252,
+  "spreadH": 17.9,
+  "spreadV": 4.2,
+  "hot": [
+   0,
+   -0.7
+  ],
+  "loops": 1,
+  "G": 0.445,
+  "cutPos": -0.43,
+  "aimFails": 2,
+  "aimDetail": {
+   "H-0.5 V0": [
+    "3 (3.5L)"
+   ],
+   "H0.5 V0": [
+    "1 (3.5R)"
+   ]
+  },
+  "sec": 7.9
+ },
+ "seeds road example low B": {
+  "imaxRatio": 1.88,
+  "fluxRatio": 1.03,
+  "spreadRatio": 1.65,
+  "allOk": true
+ },
+ "seeds road customer B": {
+  "imaxRatio": 4.33,
+  "fluxRatio": 1.52,
+  "spreadRatio": 2.29,
+  "allOk": true
+ }
+}
