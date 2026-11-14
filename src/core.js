@@ -1,99 +1,114 @@
 // ---------- Synthetic beam core (internal frame: right-hand traffic, H + right, V + up, degrees) ----------
 const DEG = Math.PI / 180;
 
-const PRESET_TABLES = {
-  low: {
-    name: "ECE R112 / R149 Class B passing beam",
-    note: "Values in cd for right-hand traffic. Check against the regulation series you certify to and edit as needed.",
-    points: [
-      { id: "B50L", h: -3.43, v: 0.57, max: 350 },
-      { id: "75R", h: 1.15, v: -0.57, min: 10100 },
-      { id: "75L", h: -3.43, v: -0.57, max: 10600 },
-      { id: "50L", h: -3.43, v: -0.86, max: 13200 },
-      { id: "50R", h: 1.72, v: -0.86, min: 10100 },
-      { id: "50V", h: 0, v: -0.86, min: 5100 },
-      { id: "25L", h: -9, v: -1.72, min: 1700 },
-      { id: "25R", h: 9, v: -1.72, min: 1700 },
-      { id: "P1", h: -4, v: 4, info: true },
-      { id: "P2", h: 0, v: 4, info: true },
-      { id: "P3", h: 4, v: 4, info: true },
-      { id: "P4", h: -4, v: 2, info: true },
-      { id: "P5", h: 0, v: 2, info: true },
-      { id: "P6", h: 4, v: 2, info: true },
-      { id: "P7", h: -8, v: 0, min: 65 },
-      { id: "P8", h: 8, v: 0, min: 125 },
-      { id: "P1+P2+P3", sum: ["P1", "P2", "P3"], min: 190 },
-      { id: "P4+P5+P6", sum: ["P4", "P5", "P6"], min: 375 },
-      { id: "Zone III", zone: [[-8, 1], [-8, 4], [8, 4], [8, 2], [4, 2], [1, 1]], max: 625 },
-      { id: "Zone IV", zone: [[-5.15, -0.86], [5.15, -0.86], [5.15, -1.72], [-5.15, -1.72]], min: 2500 },
-      { id: "Zone I", zone: [[-9, -1.72], [9, -1.72], [9, -6], [-9, -6]], maxRef: { id: "50R", k: 2 } }
-    ]
-  },
-  high: {
-    name: "ECE R112 / R149 driving beam",
-    note: "Values in cd per lamp. Check against the regulation series you certify to and edit as needed.",
-    points: [
-      { id: "Imax", imax: true, min: 48000, max: 215000 },
-      { id: "HV", h: 0, v: 0, minRatioImax: 0.8 },
-      { id: "H-2.5L", h: -2.5, v: 0, min: 24000 },
-      { id: "H-2.5R", h: 2.5, v: 0, min: 24000 },
-      { id: "H-5L", h: -5, v: 0, min: 6000 },
-      { id: "H-5R", h: 5, v: 0, min: 6000 }
-    ]
-  }
-};
-
-// ---- symmetric passing beam (R149 Classes CS, DS, ES; values as R113 01 series) ----
-function symLowTable(cls) {
-  const k = { CS: 0, DS: 1, ES: 2 }[cls];
-  const pick = a => a[k];
-  return [
-    { id: "1 (3.5R)", h: 3.5, v: -0.86, min: pick([2000, 2000, 2500]), max: 13750 },
-    { id: "2 (V)", h: 0, v: -0.86, min: pick([2450, 4900, 4900]) },
-    { id: "3 (3.5L)", h: -3.5, v: -0.86, min: pick([2000, 2000, 2500]), max: 13750 },
-    { id: "4L", h: -1.5, v: 0.5, max: 900 },
-    { id: "4R", h: 1.5, v: 0.5, max: 900 },
-    { id: "5L", h: -15, v: -2, min: pick([550, 1100, 1100]) },
-    { id: "5R", h: 15, v: -2, min: pick([550, 1100, 1100]) },
-    { id: "6L", h: -20, v: -4, min: pick([150, 300, 600]) },
-    { id: "6R", h: 20, v: -4, min: pick([150, 300, 600]) },
-    { id: "7 (HV)", h: 0, v: 0, max: 1700 },
-    { id: "Line 1", line: [[-9, -2], [9, -2]], min: pick([1350, 1350, 1900]) },
-    { id: "8", h: -8, v: 4, max: 700 },
-    { id: "9", h: 0, v: 4, max: 700 },
-    { id: "10", h: 8, v: 4, max: 700 },
-    { id: "11", h: -4, v: 2, max: 900 },
-    { id: "12", h: 0, v: 2, max: 900 },
-    { id: "13", h: 4, v: 2, max: 900 },
-    { id: "14L", h: -8, v: 0, min: 50 },
-    { id: "14R", h: 8, v: 0, min: 50 },
-    { id: "15L", h: -4, v: 0, min: 100, max: 900 },
-    { id: "15R", h: 4, v: 0, min: 100, max: 900 },
-    { id: "Zone 1", zone: [[-8, 1], [-8, 4], [8, 4], [8, 1], [4, 0], [1, 0], [0, 0.6], [-1, 0], [-4, 0]], max: 900 },
-    { id: "Zone 2", zone: [[-8, 4.01], [8, 4.01], [8, 14.99], [-8, 14.99]], max: 700 }
-  ];
-}
-function symHighTable(cls) {
-  const T = {
-    BS: { imax: 20000, hv: 16000, h25: 9000, h5: 2500 },
-    CS: { imax: 25000, hv: 20000, h25: 10000, h5: 3500, h9: 2000, h12: 600, u2: 1000 },
-    DSES: { imax: 40000, hv: 30000, h25: 20000, h5: 5000, h9: 3400, h12: 1000, u2: 1700 }
-  }[cls];
+// ---------- regulation tables: UN R149, Rev.0 as amended by Amendment 6 (E/ECE/TRANS/505/Rev.3/Add.148/Amend.6) ----------
+// Values in cd for one lamp, right-hand traffic (LHT mirrors H). h: + right, - left; v: + up, - down.
+// Elements: point (h, v), line [[h1,v1],[h2,v2]] (every point on it), zone polygon, sum of point ids, imax.
+// Limits: min, max, minRatioImax, maxRef { id, k } (k times the value at another element).
+const SEG = (id, v, h1, h2, lim) => Object.assign({ id, line: [[h1, v], [h2, v]] }, lim);
+const REG_NOTE = "UN R149 Rev.0 Amendment 6, values in cd for one lamp (the requirement for a matched pair is shared between the two lamps). Check against the series you certify to and edit as needed.";
+// Table 6, Classes C and V passing beam (asymmetric cut-off). c = [Class C, Class V]
+function asymLowTable(cls) {
+  const k = cls === "V" ? 1 : 0, pick = a => a[k];
   const t = [
-    { id: "Imax", imax: true, min: T.imax, max: 215000 },
-    { id: "H-V", h: 0, v: 0, min: T.hv },
-    { id: "H-2.5L", h: -2.5, v: 0, min: T.h25 }, { id: "H-2.5R", h: 2.5, v: 0, min: T.h25 },
-    { id: "H-5L", h: -5, v: 0, min: T.h5 }, { id: "H-5R", h: 5, v: 0, min: T.h5 }
+    { id: "Zone III", zone: [[-8, 1], [-8, 4], [8, 4], [8, 2], [6, 1.5], [1.5, 1.5], [0, 0], [-4, 0]], max: 625 },
+    { id: "BR", h: 2.5, v: 1, max: 1750 },
+    SEG("Segment BLL", 0.57, -20, -8, { max: 625 }),
+    { id: "B50L", h: -3.43, v: 0.57, max: 350 },
+    { id: "P", h: -7, v: 0, min: 63 }
   ];
-  if (T.h9) t.push({ id: "H-9L", h: -9, v: 0, min: T.h9 }, { id: "H-9R", h: 9, v: 0, min: T.h9 },
-    { id: "H-12L", h: -12, v: 0, min: T.h12 }, { id: "H-12R", h: 12, v: 0, min: T.h12 }, { id: "2U-V", h: 0, v: 2, min: T.u2 });
+  if (k === 0) t.push({ id: "75R", h: 1.15, v: -0.57, min: 12100 });
+  t.push(
+    { id: "50L", h: -3.43, v: -0.86, min: pick([5000, 3550]), max: 37000 },
+    { id: "50V", h: 0, v: -0.86, min: 5100 },
+    { id: "50R", h: 1.72, v: -0.86, min: pick([10100, 5100]) },
+    SEG("Segment 50", -0.86, -6.84, 6.84, { min: pick([2540, 1800]) }),
+    SEG("Segment 40LL", -1.07, -14, -9, { min: pick([850, 600]) }),
+    { id: "40L", h: -9, v: -1.07, min: pick([2800, 1950]) },
+    { id: "40R", h: 9, v: -1.07, min: pick([2800, 1950]) },
+    SEG("Segment 40RR", -1.07, 9, 14, { min: pick([850, 600]) }),
+    { id: "25V", h: 0, v: -1.72, min: pick([2500, 1750]) },
+    SEG("Segment 25L", -1.72, -16, -9, { min: pick([1180, 825]) }),
+    SEG("Segment 25", -1.72, -9, 9, { min: pick([1700, 1200]) }),
+    SEG("Segment 25R", -1.72, 9, 16, { min: pick([1180, 825]) }),
+    SEG("Segment 15", -2.86, -20, 20, { min: pick([425, 300]) }),
+    SEG("Segment 10", -4, -4.5, 2, { min: pick([500, 350]) }),
+    { id: "Segment 10 and below", zone: [[-4.5, -4], [2, -4], [2, -12], [-4.5, -12]], maxRef: { id: pick(["50R", "25V"]), k: 0.8 } }
+  );
+  if (k === 1) t.push({ id: "Imax", imax: true, max: 44100 });
+  // overhead sign points (Table 6 Part B); a pair of position lamps may be lit for these (Class C)
+  t.push(
+    { id: "S50LL", h: -8, v: 4, info: true }, { id: "S50", h: 0, v: 4, info: true }, { id: "S50RR", h: 8, v: 4, info: true },
+    { id: "S100LL", h: -4, v: 2, info: true }, { id: "S100", h: 0, v: 2, info: true }, { id: "S100RR", h: 4, v: 2, info: true });
+  if (k === 0) t.push({ id: "S50+S50LL+S50RR", sum: ["S50", "S50LL", "S50RR"], min: 190 }, { id: "S100+S100LL+S100RR", sum: ["S100", "S100LL", "S100RR"], min: 375 });
   return t;
 }
-const SYM_NOTE = "Symmetric classes for L and T category vehicles. Values in cd as in R113 01 series, carried into R149. Check against the series you certify to and edit as needed.";
-["CS", "DS", "ES"].forEach(c => { PRESET_TABLES["low_" + c] = { name: `ECE R149 Class ${c} passing beam (symmetric)`, note: SYM_NOTE, points: symLowTable(c) }; });
-PRESET_TABLES.high_BS = { name: "ECE R149 Class BS driving beam", note: SYM_NOTE + " Primary driving beam; HV need not lie in the 80 % isocandela.", points: symHighTable("BS") };
-PRESET_TABLES.high_CS = { name: "ECE R149 Class CS driving beam", note: SYM_NOTE + " Primary driving beam; HV need not lie in the 80 % isocandela.", points: symHighTable("CS") };
-PRESET_TABLES.high_DSES = { name: "ECE R149 Class DS / ES driving beam", note: SYM_NOTE + " Primary driving beam; HV need not lie in the 80 % isocandela.", points: symHighTable("DSES") };
+// Tables 14, 15 and 16: symmetric passing beam, Classes AS, BS, CS and DS
+function symLowTable(cls) {
+  const zone1 = (a, b) => [[-5, a], [5, a], [5, b], [-5, b]];
+  if (cls === "AS") return [
+    { id: "Zone 1", zone: zone1(0, 15), max: 320 },
+    SEG("Line 25L to 25R", -1.72, -5, 5, { min: 1100 }),
+    SEG("Line 12.5L to 12.5R", -3.43, -5, 5, { min: 550 })
+  ];
+  if (cls === "BS") return [
+    { id: "Zone 1", zone: zone1(0, 15), max: 700 },
+    SEG("Line 50L to 50R", -0.86, -2.5, 2.5, { min: 1100 }),
+    { id: "50V", h: 0, v: -0.86, min: 2200 },
+    SEG("Line 25L to 25R", -1.72, -5, 5, { min: 2200 }),
+    { id: "Zone 2", zone: [[-5, -0.86], [5, -0.86], [5, -1.72], [-5, -1.72]], min: 1100 }
+  ];
+  const k = cls === "DS" ? 1 : 0, pick = a => a[k];
+  return [
+    { id: "Zone 2", zone: [[-8, 4.01], [8, 4.01], [8, 15], [-8, 15]], max: 700 },
+    { id: "Zone 1", zone: [[-8, 1], [-8, 4], [8, 4], [8, 1], [4, 0], [1, 0], [0, 0.6], [-1, 0], [-4, 0]], max: 900 },
+    { id: "P8", h: -8, v: 4, max: 700 }, { id: "P9", h: 0, v: 4, max: 700 }, { id: "P10", h: 8, v: 4, max: 700 },
+    { id: "P8+P9+P10", sum: ["P8", "P9", "P10"], min: 150 },
+    { id: "P11", h: -4, v: 2, max: 900 }, { id: "P12", h: 0, v: 2, max: 900 }, { id: "P13", h: 4, v: 2, max: 900 },
+    { id: "P11+P12+P13", sum: ["P11", "P12", "P13"], min: 300 },
+    { id: "P14L", h: -8, v: 0, min: 50 },
+    { id: "P15L", h: -4, v: 0, min: 100, max: 900 },
+    { id: "P7", h: 0, v: 0, max: 1700 },
+    { id: "P15R", h: 4, v: 0, min: 100, max: 900 },
+    { id: "P14R", h: 8, v: 0, min: 50 },
+    { id: "P3", h: -3.5, v: -0.86, max: 13800 },
+    { id: "P2", h: 0, v: -0.86, min: pick([2450, 4900]) },
+    { id: "P1", h: 3.5, v: -0.86, max: 13800 },
+    SEG("Segment 123", -0.86, -3.5, 3.5, { min: 2000 }),
+    SEG("Segment 4LL", -1.07, -9, -3.5, { min: pick([425, 850]) }),
+    SEG("Segment 4RR", -1.07, 3.5, 9, { min: pick([425, 850]) }),
+    SEG("Segment 5", -2, -15, 15, { min: pick([550, 1100]) }),
+    { id: "1.72D-V", h: 0, v: -1.72, info: true },
+    SEG("Segment 6", -4, -20, 20, { min: pick([150, 300]), maxRef: { id: "1.72D-V", k: 0.8 } })
+  ];
+}
+// Table 5: driving beam, Classes A, B, RA, BS, CS, DS
+function highTable(cls) {
+  const T = {
+    A: { imax: 27000, hv: null, h3: 12000, h6: 3400, h9: 2000, h12: 600, u2: 1000 },
+    B: { imax: 40000, hv: null, h3: 17500, h6: 5000, h9: 3400, h12: 1500, u2: 1700 },
+    RA: { imax: 10000, hv: null },
+    BS: { imax: 20000, hv: 16000, h3: 9000, h6: 2500 },
+    CS: { imax: 27000, hv: 20000, h3: 12000, h6: 3400, u2: 1000 },
+    DS: { imax: 40000, hv: 30000, h3: 17500, h6: 5000, u2: 1700 }
+  }[cls];
+  const t = [{ id: "Imax", imax: true, min: T.imax, max: 215000 }, T.hv ? { id: "H-V", h: 0, v: 0, min: T.hv } : { id: "H-V", h: 0, v: 0, minRatioImax: 0.8 }];
+  const pair = (n, deg, val) => { if (val) t.push({ id: `H-${n}L`, h: -deg, v: 0, min: val }, { id: `H-${n}R`, h: deg, v: 0, min: val }); };
+  pair(3, 3, T.h3); pair(6, 6, T.h6); pair(9, 9, T.h9); pair(12, 12, T.h12);
+  if (T.u2) t.push({ id: "2U-V", h: 0, v: 2, min: T.u2 });
+  return t;
+}
+const PRESET_TABLES = {};
+const LOW_NAMES = { C: "Class C passing beam (asymmetric)", V: "Class V passing beam (asymmetric)", AS: "Class AS passing beam (symmetric)", BS: "Class BS passing beam (symmetric)", CS: "Class CS passing beam (symmetric)", DS: "Class DS passing beam (symmetric)" };
+["C", "V"].forEach(k => { PRESET_TABLES["low_" + k] = { name: "ECE R149 " + LOW_NAMES[k], note: REG_NOTE + (k === "C" ? " The position lamps may be lit for the overhead sign points." : ""), points: asymLowTable(k) }; });
+["AS", "BS", "CS", "DS"].forEach(k => { PRESET_TABLES["low_" + k] = { name: "ECE R149 " + LOW_NAMES[k], note: REG_NOTE + " Passing beam for L and T category vehicles.", points: symLowTable(k) }; });
+const HIGH_NAMES = { A: "Class A driving beam", B: "Class B driving beam", RA: "Class RA auxiliary driving beam", BS: "Class BS driving beam", CS: "Class CS secondary driving beam", DS: "Class DS secondary driving beam" };
+Object.keys(HIGH_NAMES).forEach(k => {
+  PRESET_TABLES["high_" + k] = { name: "ECE R149 " + HIGH_NAMES[k],
+    note: REG_NOTE + (["BS", "CS", "DS"].includes(k) ? " HV need not lie in the 80 % isocandela." : " HV must lie within the 80 % isocandela of Imax.") + " Imax at most 215 000 cd.", points: highTable(k) };
+});
+PRESET_TABLES.low = PRESET_TABLES.low_C;
+PRESET_TABLES.high = PRESET_TABLES.high_B;
 
 const PRESET_ROAD = {
   low: {
@@ -810,7 +825,7 @@ function evalGridSqrt(P, G) {
   }
   return { imax: max, hMax: hs[mi], vMax: vs[mj], mi, mj, flux };
 }
-// hot spot: default 75R (Class B), 0.86D (symmetric), H-V (high beam), or the user's value;
+// hot spot: default 75R (Class C), 0.86D (symmetric), H-V (high beam), or the user's value;
 // the model centre may sit a little off it so the masked peak lands on the target
 function sqrtHotDefault(beam, cut) { return beam === "high" ? { h: 0, v: 0 } : cut && cut.sym ? { h: 0, v: -0.86 } : { h: 1.15, v: -0.57 }; }
 function decodeS(u, beam, cut, opt) {
@@ -1095,23 +1110,30 @@ function makeLoopSolverS(ctx, u0, opt) {
 // -------------------------------------------------------------------------------------
 const PARAM_DEFAULTS = { low: { imax: 30000, flux: 800, sph: 14, spv: 4 }, low_sym: { imax: 18000, flux: 700, sph: 16, spv: 4 }, low_CS: { imax: 18000, flux: 400, sph: 16, spv: 4 },
   high: { imax: 90000, flux: 1200, sph: 12, spv: 6 }, high_sym: { imax: 60000, flux: 800, sph: 12, spv: 6 } };
-// aim tolerance box, +/- degrees. 0.4 H with 0.2 V is the largest box a Class B beam can pass: at 0.5 H and 0.2 V the
-// shoulder of the cut-off lands on the 75R point.
+// aim tolerance box, +/- degrees. Under Amendment 6 a Class C beam passes about 0.3 H with 0.15 V (75R at 12 100 cd is the
+// limit: the cut-off shoulder lands on it); the other classes pass 0.4 H with 0.2 V.
 const Q_DEFAULT = 0.3, G_DEFAULT = 0.25, AIM_DEFAULT = { h: 0, v: 0 };
-// R149 cut-off sharpness limits: asymmetric 0.13 to 0.40 (Annex 5); symmetric at least 0.13 (BS) or 0.08 (AS, CS, DS, ES), no maximum (Annex 6)
-function gLimits(cut, cls) { return cut && cut.sym ? { min: cls === "BS" ? 0.13 : 0.08, max: null } : { min: 0.13, max: 0.40 }; }
-const TABLE_KEYS = { low: { B: "low", CS: "low_CS", DS: "low_DS", ES: "low_ES" }, high: { B: "high", BS: "high_BS", CS: "high_CS", DSES: "high_DSES" } };
-function tableKeyFor(beam, cls) { return TABLE_KEYS[beam][cls] || TABLE_KEYS[beam].B; }
-function paramDefaults(beam, cls) { return PARAM_DEFAULTS[beam + "_" + cls] || PARAM_DEFAULTS[beam + (cls === "B" ? "" : "_sym")]; }
-function hotDefault(beam, cls, lht) { return beam === "high" ? { h: 0, v: 0 } : cls === "B" ? { h: lht ? -1.15 : 1.15, v: -0.57 } : { h: 0, v: -0.86 }; }   // display frame
+// R149 Annex 6 para 2.2.2: cut-off sharpness G at least 0.13 (asymmetric) or 0.08 (symmetric); at most 0.40 for the asymmetric cut-off only
+function gLimits(cut) { return cut && cut.sym ? { min: 0.08, max: null } : { min: 0.13, max: 0.40 }; }
+const CLASSES_OF = { low: ["C", "V", "AS", "BS", "CS", "DS"], high: ["B", "A", "RA", "BS", "CS", "DS"] };
+// Class names from earlier versions of this tool and of R112 / R113: Class B passing beam is now Class C; Class ES and DS/ES became Class DS
+function normClass(beam, cls) {
+  const alias = beam === "high" ? { DSES: "DS", ES: "DS" } : { B: "C", ES: "DS", DSES: "DS" };
+  const k = alias[cls] || cls;
+  return CLASSES_OF[beam].includes(k) ? k : CLASSES_OF[beam][0];
+}
+const isAsymLow = (beam, cls) => beam === "low" && (cls === "C" || cls === "V");
+function tableKeyFor(beam, cls) { return beam + "_" + normClass(beam, cls); }
+function paramDefaults(beam, cls) { return PARAM_DEFAULTS[beam + "_" + cls] || PARAM_DEFAULTS[beam + (isAsymLow(beam, cls) || beam === "high" && !["BS", "CS", "DS"].includes(cls) ? "" : "_sym")]; }
+function hotDefault(beam, cls, lht) { return beam === "high" ? { h: 0, v: 0 } : isAsymLow(beam, cls) ? { h: lht ? -1.15 : 1.15, v: -0.57 } : { h: 0, v: -0.86 }; }   // display frame
 function defaultCut(beam, cls) {
-  const sym = beam === "low" && cls !== "B";
+  const sym = beam === "low" && !isAsymLow(beam, cls);
   const sharp = widthForG(G_DEFAULT, 1.9);
   return sym ? { elbow: -0.57, angle: 0, cap: -0.57, sharp, G: G_DEFAULT, off: 0, sym: true } : { elbow: -0.57, angle: 15, cap: 0.5, sharp, G: G_DEFAULT, off: 0 };
 }
 // Same configuration the page gathers from its inputs, filled from defaults. o: { beam, cls, mode, checks, traffic, model, targets, smile, roadFluxTarget }
 function defaultConfig(o) {
-  const beam = o.beam || "low", cls = o.cls || "B", mode = o.mode || "param", lht = o.traffic === "LHT";
+  const beam = o.beam || "low", cls = normClass(beam, o.cls), mode = o.mode || "param", lht = o.traffic === "LHT";
   const d = paramDefaults(beam, cls), cut = defaultCut(beam, cls), H = 0.65, sp = 1.4;
   let targets;
   if (mode === "param") {
@@ -1120,7 +1142,7 @@ function defaultConfig(o) {
   } else targets = Object.assign({ imax: null, flux: null, spreadH: null, spreadV: null }, o.targets || {});
   const rft = o.roadFluxTarget !== undefined ? o.roadFluxTarget : roadFluxDefault(beam, cls);
   return { beam, cls, key: tableKeyFor(beam, cls), sym: !!cut.sym, cut, table: PRESET_TABLES[tableKeyFor(beam, cls)].points, lht, H, sp,
-    checks: normalizeChecks(o.checks || (mode === "param" && beam === "low" && cls === "B" ? PRESET_ROAD.low.checks : [])), evalH: 0, plane: "vertical", targets,
+    checks: normalizeChecks(o.checks || (mode === "param" && isAsymLow(beam, cls) ? PRESET_ROAD.low.checks : [])), evalH: 0, plane: "vertical", targets,
     roadFlux: { zone: Object.assign({}, ROAD_FLUX_ZONE), target: rft, lamps: "one", height: H, spacing: sp, traffic: lht ? "LHT" : "RHT" },
     shape: mode === "param" ? { smile: o.smile != null ? o.smile : Q_DEFAULT, hot: targets.hot } : null, lane: 3.5, mode, model: o.model || "hybrid",
     aim: o.aim !== undefined ? o.aim : Object.assign({}, AIM_DEFAULT),
@@ -1298,4 +1320,4 @@ function listMisses(c, res, imaxAsked) {
 }
 function solveSync(c) { const job = createJob(c); while (!job.run(200)); return job.result(); }
 
-if (typeof module !== "undefined") module.exports = { explainMisses, listMisses, costTerms, PHYS_DEFAULT, physLimits, physReport, AIM_DEFAULT, shiftTable, tableEval, aimAnalysis, cutoffScan, cutBlend, widthForG, gLimits, G_DEFAULT, PARAM_DEFAULTS, Q_DEFAULT, tableKeyFor, paramDefaults, hotDefault, defaultCut, defaultConfig, contextFor, createJob, solveSync, makeGrid, evalGrid, makeSolverS, makeCMA, decodeY, initHybrid, kneePenalty, makeLoopSolverS, decodeS, initSqrt, makeSolverS, sqrtRel, SMILE, applySmile, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };
+if (typeof module !== "undefined") module.exports = { normClass, isAsymLow, CLASSES_OF, explainMisses, listMisses, costTerms, PHYS_DEFAULT, physLimits, physReport, AIM_DEFAULT, shiftTable, tableEval, aimAnalysis, cutoffScan, cutBlend, widthForG, gLimits, G_DEFAULT, PARAM_DEFAULTS, Q_DEFAULT, tableKeyFor, paramDefaults, hotDefault, defaultCut, defaultConfig, contextFor, createJob, solveSync, makeGrid, evalGrid, makeSolverS, makeCMA, decodeY, initHybrid, kneePenalty, makeLoopSolverS, decodeS, initSqrt, makeSolverS, sqrtRel, SMILE, applySmile, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };

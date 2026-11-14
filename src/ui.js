@@ -13,11 +13,11 @@ function compactJSON(o) {
 }
 // classes per beam function; key = PRESET_TABLES entry
 const CLASSES = {
-  low: [["B", "B (asymmetric)", "low"], ["CS", "CS (symmetric)", "low_CS"], ["DS", "DS (symmetric)", "low_DS"], ["ES", "ES (symmetric)", "low_ES"]],
-  high: [["B", "With Class B (asym.)", "high"], ["BS", "BS (symmetric)", "high_BS"], ["CS", "CS (symmetric)", "high_CS"], ["DSES", "DS / ES (symmetric)", "high_DSES"]]
+  low: [["C", "C (asymmetric)", "low_C"], ["V", "V (asymmetric)", "low_V"], ["AS", "AS (symmetric)", "low_AS"], ["BS", "BS (symmetric)", "low_BS"], ["CS", "CS (symmetric)", "low_CS"], ["DS", "DS (symmetric)", "low_DS"]],
+  high: [["B", "B driving beam", "high_B"], ["A", "A driving beam", "high_A"], ["RA", "RA auxiliary driving beam", "high_RA"], ["BS", "BS (symmetric)", "high_BS"], ["CS", "CS (symmetric)", "high_CS"], ["DS", "DS (symmetric)", "high_DS"]]
 };
 const tableKey = () => (CLASSES[S.beam].find(c => c[0] === $("cls").value) || CLASSES[S.beam][0])[2];
-const isSym = () => S.beam === "low" && $("cls").value !== "B";
+const isSym = () => S.beam === "low" && !["C", "V"].includes($("cls").value);
 function tableFor(key) { if (S.tables[key] == null) S.tables[key] = compactJSON(PRESET_TABLES[key].points); return S.tables[key]; }
 function fillClasses(keep) {
   const prev = keep || $("cls").value;
@@ -44,7 +44,7 @@ function setDefaults() {
   $("imax").value = d.imax; $("flux").value = d.flux; $("sph").value = d.sph; $("spv").value = d.spv;
   setHotDefault();
 }
-// default hot spot: 75R / 75L (Class B), 0.86D-V (symmetric classes), H-V (high beam)
+// default hot spot: 75R / 75L (Class C), 0.86D-V (symmetric classes), H-V (high beam)
 function setHotDefault() {
   const cls = $("cls").value, lht = $("traffic").value === "LHT";
   const hot = hotDefault(S.beam, cls, lht);
@@ -112,7 +112,7 @@ function syncFromJson() {
     $("physOn").checked = ph.enabled !== false; $("physBox").hidden = !$("physOn").checked;
   }
   const fn = road.function === "low" || road.function === "high" ? road.function : S.beam;
-  const cls = road.class && CLASSES[fn].some(c => c[0] === road.class) ? road.class : null;
+  const rc = road.class ? normClass(fn, road.class) : null, cls = rc && CLASSES[fn].some(c => c[0] === rc) ? rc : null;
   if (fn === S.beam && (!cls || cls === $("cls").value)) return;
   $("fn").value = fn; S.beam = fn; fillClasses(cls || undefined); setDefaults(); syncCut(); showTable();
 }
@@ -583,7 +583,7 @@ $("riCopy").onclick = () => {
 };
 $("iesBuild").onclick = () => { $("iesOut").value = buildIES(); };
 function iesName() {
-  const c = S.cfg, cls = c.cls === "DSES" ? "DS-ES" : c.cls;
+  const c = S.cfg, cls = c.cls;
   return `beamsynth_${c.beam === "low" ? "low" : "high"}_class-${cls}_${c.lht ? "LHT" : "RHT"}_${Math.round(S.res.imax)}cd.ies`;
 }
 $("iesDl").onclick = () => {
@@ -661,7 +661,7 @@ function showResults() {
 }
 
 // ---------- start ----------
-fillClasses("B"); syncCut(); showTable(); setRoadFluxDefault(); setHotDefault();
+fillClasses("C"); syncCut(); showTable(); setRoadFluxDefault(); setHotDefault();
 updateSecs();
 setTimeout(generate, 50);
 })();

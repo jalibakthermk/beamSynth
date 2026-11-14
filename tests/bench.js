@@ -4,17 +4,17 @@ const fs = require("fs"), path = require("path");
 const { C, measure } = require("./metrics.js");
 const cust = JSON.parse(fs.readFileSync(path.join(__dirname, "customer-style-set.json")));
 const CASES = [
-  ["param low B", { beam: "low", cls: "B", mode: "param" }],
+  ["param low B", { beam: "low", cls: "C", mode: "param" }],
   ["param low CS", { beam: "low", cls: "CS", mode: "param" }],
   ["param low DS", { beam: "low", cls: "DS", mode: "param" }],
   ["param low ES", { beam: "low", cls: "ES", mode: "param" }],
   ["param high B", { beam: "high", cls: "B", mode: "param" }],
   ["param high BS", { beam: "high", cls: "BS", mode: "param" }],
   ["param high DSES", { beam: "high", cls: "DSES", mode: "param" }],
-  ["param low B LHT", { beam: "low", cls: "B", mode: "param", traffic: "LHT" }],
-  ["road example low B", { beam: "low", cls: "B", mode: "road", checks: C.PRESET_ROAD.low.checks }],
+  ["param low B LHT", { beam: "low", cls: "C", mode: "param", traffic: "LHT" }],
+  ["road example low B", { beam: "low", cls: "C", mode: "road", checks: C.PRESET_ROAD.low.checks }],
   ["road example high", { beam: "high", cls: "B", mode: "road", checks: C.PRESET_ROAD.high.checks }],
-  ["road customer B", { beam: "low", cls: "B", mode: "road", checks: cust }],
+  ["road customer B", { beam: "low", cls: "C", mode: "road", checks: cust }],
   ["road customer ES", { beam: "low", cls: "ES", mode: "road", checks: cust }]
 ];
 const SEEDS = [4242, 1, 2, 3];

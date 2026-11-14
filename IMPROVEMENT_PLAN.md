@@ -31,3 +31,7 @@ Notes:
 - A flat symmetric cut-off at 0.57° D cannot light the vehicle axis at 70 m from a 0.65 m mounting height (that point lies at 0.53° D). The Class ES benchmark case therefore misses its 70 m range check; the earlier pass came from the cut-off sitting too high.
 - Aim tolerance costs light: with a ±0.2° V, ±0.4° H box the lowest-flux beams need roughly 1.5 to 2.5 times the flux of the nominal-aim solution (customer-style set, Class B: 160 lm at nominal aim, 236 lm with the box), and the hot spot moves right, away from the shoulder. A ±0.5° H box with ±0.2° V is not reachable for Class B, because the 75R point then lies on the cut-off shoulder.
 - The `aim` column of the benchmark counts the aim positions (of 8) where ECE fails inside the configured box; `bench-phase3.json` is solved at nominal aim, `bench-phase3-aim.json` with the box.
+
+
+## Regulation update (R149 Amendment 6)
+Tables replaced with Amendment 6 values (Tables 5, 6, 14, 15, 16). Class B passing beam is now Class C; Class ES is removed; Class B is now a driving beam. Class C aim box passes about ±0.3° H, ±0.15° V (was ±0.4/±0.2). 28 of 28 tests pass.

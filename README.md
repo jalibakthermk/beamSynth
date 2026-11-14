@@ -9,7 +9,7 @@ It runs entirely in the browser: open `docs/index.html`, or the GitHub Pages sit
 - **Two ways to define the beam**
   - **Road requirement (JSON):** give customer requirements on the road and the tool solves for a beam that meets them. The format is the same requirement set used in [road-illuminate](https://github.com/jalibakthermk/Road-illuminate), so one customer-spec file works in both tools.
   - **Beam parameters:** maximum intensity (cd), luminous flux (lm), horizontal spread (±°, half-width at 5 % of Imax), vertical spread (°, height at 5 % of Imax), hot spot position and Q factor.
-    - **Hot spot position** (H, V in degrees). Defaults: 75R (1.15R 0.57D) for Class B, mirrored to 75L in left-hand traffic; 0.86D on V-V for the symmetric classes; H-V for the high beam. The solver holds the peak within about 0.1–0.3° of it.
+    - **Hot spot position** (H, V in degrees). Defaults: 75R (1.15R 0.57D) for Class C or V, mirrored to 75L in left-hand traffic; 0.86D on V-V for the symmetric classes; H-V for the high beam. The solver holds the peak within about 0.1–0.3° of it.
     - **Q factor** (0–1, default 0.7) shapes the bottom of the beam; the slider runs from "+" shape at 0 to strong smile at 1. Q does not move the hot spot or change the H spread.
   - Requirement files can be uploaded (click or drag and drop) or pasted.
   - **Beam function and class** are set once, above the two input modes, and apply to both. A requirement file that names `function` and `class` sets them when it is loaded.
@@ -27,15 +27,17 @@ It runs entirely in the browser: open `docs/index.html`, or the GitHub Pages sit
 
   | Function | Class | Cut-off | Test table |
   |---|---|---|---|
-  | Low beam | B | asymmetric, 15° shoulder | B50L, 75R/L, 50R/L/V, 25R/L, P1–P8, Zones I, III, IV |
-  | Low beam | CS, DS, ES | symmetric, flat at 0.57° D | points 1–15, Line 1 (2° D, 9L–9R), Zones 1 and 2 |
-  | High beam | with Class B | – | Imax 48 000–215 000 cd, HV ≥ 0.8 Imax, H-2.5, H-5 |
-  | High beam | BS, CS, DS / ES | – | Imax min 20 000 / 25 000 / 40 000 cd (max 215 000), H-V, H-2.5, H-5, and for CS and DS / ES also H-9, H-12, 2U-V |
+  | Low beam | C, V | asymmetric, 15° shoulder | Table 6: Zone III, BR, B50L, 75R (C only), 50L/V/R, Segments 50, 40, 25, 15, 10, "10 and below", Imax (V only), overhead sign sums (C only) |
+  | Low beam | AS, BS, CS, DS | symmetric, flat at 0.57° D | Tables 14–16: Zones 1 and 2, points P1–P15, Segments 4, 5, 6, lines at 0.86° D and 1.72° D |
+  | High beam | A, B, RA | – | Table 5: Imax min 27 000 / 40 000 / 10 000 cd (max 215 000), HV ≥ 0.8 Imax, H-3 to H-12, 2U-V |
+  | High beam | BS, CS, DS | – | Table 5: Imax min 20 000 / 27 000 / 40 000 cd (max 215 000), HV minimum, H-3 and H-6 (BS), plus 2U-V (CS, DS) |
+
+  Values follow UN R149 Rev.0 as amended by Amendment 6, per lamp. Not modelled: Classes E and W (adaptive driving beam, Table 7), the matched-pair rule, and the 0.25° tolerance at test points. Cut-off sharpness G must be at least 0.08 for every symmetric class. Earlier class names still load: low `B` reads as `C`, `ES` and `DSES` read as `DS`.
 
   For symmetric passing beams the lobes are centred on V-V. The symmetric driving beams have no "HV within 80 % of Imax" check, as R149 exempts them.
 - **Right- or left-hand traffic.** The tables are written for RHT; LHT mirrors the beam.
 - **Export**
-  - **Download IES:** LM-63-2002, photometric type B (H-V), absolute candela, one lamp, saved with a name such as `beamsynth_low_class-B_RHT_30081cd.ies`. Load it into road-illuminate to verify the beam. The file can also be copied as text.
+  - **Download IES:** LM-63-2002, photometric type B (H-V), absolute candela, one lamp, saved with a name such as `beamsynth_low_class-C_RHT_30081cd.ies`. Load it into road-illuminate to verify the beam. The file can also be copied as text.
   - The requirement set back in road-illuminate format.
   - The fitted model parameters as JSON.
 
@@ -74,7 +76,7 @@ Paste a road-illuminate requirement set as it is (a list of checks), or wrap it 
 - `x` is distance ahead of the lamps, `y` is lateral offset from the vehicle centreline, **positive to the left** (as in road-illuminate). Values are for the lamp pair.
 - `op` is `">="` or `"<="`.
 - `z` (optional, per check) sets that check's evaluation height. This is a Beam Synth extension; road-illuminate ignores it.
-- `class` (optional): `B`, `CS`, `DS`, `ES` for the passing beam; `B`, `BS`, `CS`, `DSES` for the driving beam.
+- `class` (optional): `C`, `V`, `AS`, `BS`, `CS`, `DS` for the passing beam; `B`, `A`, `RA`, `BS`, `CS`, `DS` for the driving beam.
 - `targets` (optional) are soft goals: `imax`, `flux_lm`, `spreadH_deg`, `spreadV_deg`. Without `flux_lm` the solver returns the lowest-flux beam that passes.
 - `aimTolerance` (optional): `v_deg` and `h_deg`, the half-sizes of the aim box in degrees.
 - `physical` (optional): switches the physical limits on (unless `enabled` is `false`) and sets `aperture_mm` (`width`, `height`), `ledLuminance_Mcd_m2` and `efficiency_pct`.
