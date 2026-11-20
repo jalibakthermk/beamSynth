@@ -11,6 +11,7 @@ It runs entirely in the browser: open `docs/index.html`, or the GitHub Pages sit
   - **Beam parameters:** maximum intensity (cd), luminous flux (lm), horizontal spread (±°, half-width at 5 % of Imax), vertical spread (°, height at 5 % of Imax), hot spot position and Q factor.
     - **Hot spot position** (H, V in degrees). Defaults: 75R (1.15R 0.57D) for Class C or V, mirrored to 75L in left-hand traffic; 0.86D on V-V for the symmetric classes; H-V for the high beam. The solver holds the peak within about 0.1–0.3° of it.
     - **Q factor** (0–1, default 0.7) shapes the bottom of the beam; the slider runs from "+" shape at 0 to strong smile at 1. Q does not move the hot spot or change the H spread.
+    - **Lobe limits** (optional, blank = no limit): **Lobe H spread** (±°) is the widest the two light lobes may reach sideways, and **Lobe bottom** (° D) the lowest they may reach. Both are measured where a lobe falls to 5 % of its own peak. Without them the foreground lobe can spread to about ±90° and 40° down, which lights a bright patch just in front of the vehicle. At 0.65 m mounting height, 10° D lands about 3.7 m ahead, 6° D about 6.2 m and 4.5° D about 8.3 m. Tight limits can leave flux or V spread short of target; the H and V spread tiles show the lobes' reach and mark a lobe held at a limit. Suggested start: ±40° H and 10° D, with a low-beam V spread target of about 8°.
   - Requirement files can be uploaded (click or drag and drop) or pasted.
   - **Beam function and class** are set once, above the two input modes, and apply to both. A requirement file that names `function` and `class` sets them when it is loaded.
 - **Lowest flux by default.** In road requirement mode with no flux target, the tool returns the beam that meets ECE and every road check with the least emitted flux.
@@ -107,6 +108,8 @@ so ln I falls with the square root of the distance. Rh and Rv are the extents to
 **Cut-off.** For the low beam the cut-off is defined on the logarithm of intensity, as R149 Annex 5 scans it. With m the lit fraction (1 well below the cut-off line, 0 well above, a logistic in between), the beam s and the floor F are mixed geometrically, E = s^m · F^(1−m). The log of E then follows an S-curve whose inflection sits on the cut-off line (horizontal elbow at 0.57° D with a 15° shoulder for Class B, flat for the symmetric classes) and whose steepest slope is G. The floor is a glare term that lights the signal points P1–P8, plus 0.3 % of the beam as stray light. The cut-off position and G are part of the solve; a short calibration afterwards corrects the width and offset if the measured scan is off.
 
 The Q factor changes how shallow the beam is toward the sides (square-root part) and how far the lobes bend upward there, which sets how strongly the lower isolines curve.
+
+The lobe limits narrow the range the solver may search for each lobe's position and widths (horizontal reach = |centre| + 2.45 σh, bottom reach = −(centre − 2.45 σv)), so the lobes stay inside the box during the whole solve. When set, they are written to the IES header as `[_LOBEMAXH]` and `[_LOBEMAXDOWN]`.
 
 **Solving.** All three models use the same solver, a CMA-ES search (diagonal covariance) whose rounds stop when they converge.
 
