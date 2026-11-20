@@ -181,7 +181,9 @@ function gather() {
   const physical = physOn ? { apW: num("apW"), apH: num("apH"), lum: num("ledL"), eff: effPct ? Math.min(100, effPct) / 100 : null } : null;
   if (physOn && (physical.apW > 0) !== (physical.apH > 0)) throw new Error("Physical limits: give both the aperture width and height, or leave both blank.");
   if (physOn && (physical.apW > 0) && !(physical.lum > 0)) throw new Error("Physical limits: the LED luminance is needed to apply the aperture limit.");
-  const shape = S.mode === "param" ? { smile: Math.min(1, Math.max(0, 1 - (+$("smile").value))), hot: targets.hot } : null;
+  const lmH = num("lobeH"), lmD = num("lobeD");
+  if ((lmH != null && !(lmH >= 5 && lmH <= 90)) || (lmD != null && !(lmD >= 2 && lmD <= 45))) throw new Error("Lobe limits: H spread 5 to 90°, bottom 2 to 45° down, or leave blank for no limit.");
+  const shape = S.mode === "param" ? { smile: Math.min(1, Math.max(0, 1 - (+$("smile").value))), hot: targets.hot, lobeMaxH: lmH || null, lobeMaxDown: lmD || null } : null;
   const rfZone = { x1: Math.max(0, num("rfX1") ?? 0), x2: num("rfX2") ?? 100, left: Math.abs(num("rfYL") ?? 10), right: Math.abs(num("rfYR") ?? 10) };
   if (!(rfZone.x2 > rfZone.x1) || !(rfZone.left + rfZone.right > 0)) throw new Error("Flux on road zone: 'to' must be beyond 'from', and the width must be more than 0.");
   const rfTarget = num("rfT");
@@ -476,8 +478,8 @@ function renderSummary() {
     physTiles(r.phys) +
     kv("Flux on road", r.roadFlux == null ? "—" : fmt(r.roadFlux) + " lm", (r.roadFluxTarget ? `minimum ${fmt(r.roadFluxTarget)} lm, ` : "") + (c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair")) +
     kv("Road share", r.roadFlux == null || !r.flux ? "—" : fmt(100 * r.roadFlux / (r.flux * (c.roadFlux.lamps === "one" ? 1 : 2))) + " %", `of emitted flux, ${fmt(c.roadFlux.zone.x1)}–${fmt(c.roadFlux.zone.x2)} m, ${fmt(c.roadFlux.zone.left, 1)} L / ${fmt(c.roadFlux.zone.right, 1)} R`) +
-    kv("H spread", "±" + fmt(r.sp.spreadH, 1) + "°", asked(t.spreadH, 1, "°") || `${angH(mir < 0 ? -r.sp.right : r.sp.left)} … ${angH(mir < 0 ? -r.sp.left : r.sp.right)}`) +
-    kv("V spread", fmt(r.sp.spreadV, 1) + "°", asked(t.spreadV, 1, "°")) +
+    kv("H spread", "±" + fmt(r.sp.spreadH, 1) + "°", (asked(t.spreadH, 1, "°") || `${angH(mir < 0 ? -r.sp.right : r.sp.left)} … ${angH(mir < 0 ? -r.sp.left : r.sp.right)}`) + lobeNote(r.lobeReach, "h")) +
+    kv("V spread", fmt(r.sp.spreadV, 1) + "°", (asked(t.spreadV, 1, "°") || "at 5 % Imax") + lobeNote(r.lobeReach, "down")) +
     kv("Hot spot", `${angH(mir * r.hMax)} ${angV(r.vMax)}`, t.hot ? `requested ${angH(mir * t.hot.h)} ${angV(t.hot.v)}` : "position of Imax") +
     kv("Reach 1 lx / 3 lx", `${r1 ? fmt(r1) : "—"} / ${r3 ? fmt(r3) : "—"} m`, ($("plane").value === "vertical" ? "vertical plane" : "road surface") + ", centreline");
   if ($("regLine")) $("regLine").textContent = `${PRESET_TABLES[c.beam].name.replace(/ (passing|driving) beam/, "")} · ${c.beam === "low" ? "low beam" : "high beam"} · ${c.lht ? "LHT (mirrored)" : "RHT"}`;
@@ -526,6 +528,12 @@ function recomputeRoad() {
   S.res.roadRows = rd.map(rc => roadRow(rc, checkValue(S.P, rc)));
 }
 
+// lobe reach at 5 % of each lobe's own peak, shown under the spread tiles
+function lobeNote(L, k) {
+  if (!L) return "";
+  const at = k === "h" ? L.atH : L.atDown;
+  return (k === "h" ? `, lobes ±${fmt(L.h, 0)}°` : `, lobes to ${fmt(L.down, 1)}° D`) + (at ? " (at limit)" : "");
+}
 // Held back by: for every unmet target and failed check, the checks that oppose it
 function renderBlocking() {
   const list = (S.res.blocking || []), c = S.cfg, mir = c.lht ? -1 : 1;
@@ -564,6 +572,8 @@ function buildIES() {
     `[_IMAX] ${Math.round(S.res.imax)} cd`, `[_FLUX] ${Math.round(S.res.flux)} lm`,
     `[_ROADFLUX] ${Math.round(S.res.roadFlux)} lm, ${c.roadFlux.lamps === "one" ? "one lamp" : "lamp pair"}, ${c.roadFlux.zone.x1}-${c.roadFlux.zone.x2} m, ${c.roadFlux.zone.left} m L / ${c.roadFlux.zone.right} m R`,
     ...(c.shape ? [`[_QFACTOR] ${qOut()}`] : []),
+    ...(c.shape && c.shape.lobeMaxH ? [`[_LOBEMAXH] ${c.shape.lobeMaxH}`] : []),
+    ...(c.shape && c.shape.lobeMaxDown ? [`[_LOBEMAXDOWN] ${c.shape.lobeMaxDown}`] : []),
     ...(S.res.G ? [`[_CUTOFF] G ${S.res.G.toFixed(3)} at 2.5 deg, cut-off at ${Math.abs(S.res.cutPos).toFixed(2)} deg D`] : []),
     ...physLines(),
     ...(S.res.aim ? [`[_AIMBOX] passes ECE within +/-${S.res.aim.v} deg V, +/-${S.res.aim.h} deg H: ${S.res.aimFailCount ? "no" : "yes"}`] : []),

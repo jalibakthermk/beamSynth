@@ -935,8 +935,31 @@ const BOUNDS_Y = {
     ["log", 200, 150000], ["lin", -2, 2], ["lin", -2.5, 1], ["log", 3, 40], ["log", 1, 10],
     ["log", 30, 30000], ["lin", -10, -1], ["log", 10, 70], ["log", 2, 15]]
 };
+// Lobe limits (optional, beam parameters mode). Both are measured where a lobe falls to 5 % of its own peak (2.45 sigma):
+//   lobeMaxH    : the largest horizontal half-width of a lobe from V-V, in deg (|centre| + 2.45 sh)
+//   lobeMaxDown : the lowest angle a lobe may reach below the horizontal, in deg (-(centre - 2.45 sv))
+// They narrow the decode range of the lobe position and widths, so the solver searches only inside them (no plateaus).
+const LOBE_EDGE = 2.45;
+function capped(b, u, hi) {   // decode u inside [b.lo, min(b.hi, hi)]
+  const top = Math.min(b[2], hi), lo = Math.min(b[1], top * 0.999);
+  return decodeVal([b[0], lo, Math.max(top, lo * 1.001)], u);
+}
+function lobeLimits(B, u, x, opt) {
+  const mh = opt && opt.lobeMaxH > 0 ? opt.lobeMaxH : null, md = opt && opt.lobeMaxDown > 0 ? opt.lobeMaxDown : null;
+  if (!mh && !md) return;
+  for (const [iv, ish, isv, ihh] of [[11, 12, 13, 10], [15, 16, 17, null]]) {
+    if (md) { const b = B[iv], lo = Math.max(b[1], -0.8 * md); x[iv] = lo >= b[2] ? b[2] : decodeVal(["lin", lo, b[2]], u[iv]); }
+    if (mh && ihh != null) { const b = B[ihh], r = Math.min(Math.max(-b[1], b[2]), 0.4 * mh); x[ihh] = decodeVal(["lin", -r, r], u[ihh]); }
+    if (mh) x[ish] = capped(B[ish], u[ish], (mh - (ihh != null ? Math.abs(x[ihh]) : 0)) / LOBE_EDGE);
+    if (md) x[isv] = capped(B[isv], u[isv], Math.max(0.05, (x[iv] + md) / LOBE_EDGE));
+  }
+}
+function lobeExtent(P) {   // reach of each lobe at 5 % of its own peak
+  return P.lobes.map(l => ({ h: Math.abs(l.h) + LOBE_EDGE * l.sh, down: -(l.v - LOBE_EDGE * l.sv), A: l.A }));
+}
 function decodeY(u, beam, cut, opt) {
   const B = BOUNDS_Y[beam], x = u.map((ui, i) => decodeVal(B[i], ui));
+  lobeLimits(B, u, x, opt);
   const hot = (opt && opt.hot) || sqrtHotDefault(beam, cut), sym = cut && cut.sym;
   const h0 = sym ? 0 : hot.h + (cut ? -0.8 + x[1] : -0.3 + 0.6 * x[1]);
   const v0 = hot.v + (cut ? -0.15 + 0.75 * x[2] : -0.3 + 0.6 * x[2]);
@@ -1239,6 +1262,12 @@ function createJob(c) {
     const P = dec(best, c.beam, cut, c.shape);
     const res = evaluate(P, Object.assign({}, ctx, { useRoad: true, cutCal: null }), true);
     res.phys = c.physical ? physReport(c.physical, res.imax, res.flux) : null;
+    if (P.model === "hybrid") {   // reach of the lobes, and whether a lobe limit is holding them in
+      const ex = lobeExtent(P), s = c.shape || {};
+      res.lobeReach = { h: Math.max(...ex.map(e => e.h)), down: Math.max(...ex.map(e => e.down)), maxH: s.lobeMaxH || null, maxDown: s.lobeMaxDown || null };
+      res.lobeReach.atH = !!(s.lobeMaxH && res.lobeReach.h > 0.97 * s.lobeMaxH);
+      res.lobeReach.atDown = !!(s.lobeMaxDown && res.lobeReach.down > 0.97 * s.lobeMaxDown);
+    }
     if (res.phys) res.phys.imaxRequested = imaxAsked;   // set when the requested Imax was above the aperture limit
     res.aim = c.aim && (c.aim.h > 0 || c.aim.v > 0) ? c.aim : null;
     res.aimFailCount = res.aim ? aimAnalysis(P, c.table, c.beam, cut, c.aim, res.imax, res.rows) : 0;
@@ -1320,4 +1349,4 @@ function listMisses(c, res, imaxAsked) {
 }
 function solveSync(c) { const job = createJob(c); while (!job.run(200)); return job.result(); }
 
-if (typeof module !== "undefined") module.exports = { normClass, isAsymLow, CLASSES_OF, explainMisses, listMisses, costTerms, PHYS_DEFAULT, physLimits, physReport, AIM_DEFAULT, shiftTable, tableEval, aimAnalysis, cutoffScan, cutBlend, widthForG, gLimits, G_DEFAULT, PARAM_DEFAULTS, Q_DEFAULT, tableKeyFor, paramDefaults, hotDefault, defaultCut, defaultConfig, contextFor, createJob, solveSync, makeGrid, evalGrid, makeSolverS, makeCMA, decodeY, initHybrid, kneePenalty, makeLoopSolverS, decodeS, initSqrt, makeSolverS, sqrtRel, SMILE, applySmile, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };
+if (typeof module !== "undefined") module.exports = { lobeExtent, normClass, isAsymLow, CLASSES_OF, explainMisses, listMisses, costTerms, PHYS_DEFAULT, physLimits, physReport, AIM_DEFAULT, shiftTable, tableEval, aimAnalysis, cutoffScan, cutBlend, widthForG, gLimits, G_DEFAULT, PARAM_DEFAULTS, Q_DEFAULT, tableKeyFor, paramDefaults, hotDefault, defaultCut, defaultConfig, contextFor, createJob, solveSync, makeGrid, evalGrid, makeSolverS, makeCMA, decodeY, initHybrid, kneePenalty, makeLoopSolverS, decodeS, initSqrt, makeSolverS, sqrtRel, SMILE, applySmile, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };
