@@ -1,64 +1,62 @@
 <title>Beam Synth</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap">
+<meta name="description" content="beamSynth: synthetic ECE R149-compliant low and high beam patterns from road requirements or beam parameters, with iso-candela, road illumination and IES export.">
+<meta name="theme-color" content="#0a0f2c">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<!-- beamKit: shared design framework for the lighting tools (https://jalibakthermk.github.io/beamkit/) -->
+<link rel="stylesheet" href="https://jalibakthermk.github.io/beamkit/beamkit.css">
+<script>try{var t=localStorage.getItem('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+<script src="https://jalibakthermk.github.io/beamkit/beamkit.js" defer></script>
 <style>
 /* Bench layout: a control rail that stays in view with the Generate action pinned to its foot; results on the right
    read top-down as verdict, figures, plots, tables, export. Dark panels are the two photometric plots only. */
+/* Colour and font names mapped onto the shared beamKit tokens (light and dark come from beamkit.css).
+   Fallback values keep the page usable if beamkit.css cannot load (e.g. offline). */
 :root{
-  --bg:#f3f5f6; --surface:#ffffff; --sunk:#e9edf0; --ink:#15212b; --muted:#55656f; --line:#d5dce1; --line-soft:#e6ebee;
-  --accent:#9a5600; --accent-ink:#ffffff; --accent-soft:#f7e9d3;
-  --pass:#1f7a45; --fail:#c0332a; --info:#6b7b88;
-  --plot-bg:#0d151d; --plot-ink:#c7d4de; --plot-dim:#8494a1; --plot-grid:rgba(199,212,222,.13); --plot-axis:rgba(199,212,222,.45);
-  --f-display:"Saira Semi Condensed","Arial Narrow",sans-serif;
-  --f-body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
-  --f-mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --bg:var(--cds-background,#f2f4f8); --surface:var(--cds-layer-01,#fff); --sunk:var(--cds-layer-02,#e8ebf1);
+  --ink:var(--cds-text-primary,#161616); --muted:var(--cds-text-secondary,#525a66);
+  --line:var(--cds-border-subtle,#d5d9e0); --line-soft:var(--cds-grid,#e4e7ec);
+  --accent:var(--cds-button-primary,#0f62fe); --accent-ink:#ffffff; --accent-soft:var(--cds-info-bg,#edf5ff);
+  --pass:var(--cds-ok,#24a148); --fail:var(--cds-bad,#da1e28); --good:var(--cds-ok,#24a148); --bad:var(--cds-bad,#da1e28);
+  --info:var(--cds-text-helper,#6f7682); --warn:var(--cds-warn-text,#8e6a00);
+  --f-display:var(--font-display,"Arial Narrow",sans-serif);
+  --f-body:var(--font-body,"Segoe UI",system-ui,sans-serif);
+  --f-mono:var(--font-mono,ui-monospace,monospace);
+  --plot-accent:#78a9ff; --plot-bg:#0d151d; --plot-ink:#c7d4de; --plot-dim:#8494a1; --plot-grid:rgba(199,212,222,.13); --plot-axis:rgba(199,212,222,.45);
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0b1117; --surface:#121b23; --sunk:#0c141b; --ink:#e3e9ee; --muted:#93a3af; --line:#25343f; --line-soft:#1b2832;
-  --accent:#f0a43a; --accent-ink:#1b1206; --accent-soft:#33260f;
-  --pass:#4cc27a; --fail:#ff6b5d; --info:#8c9daa; color-scheme:dark;}}
-:root[data-theme="dark"]{
-  --bg:#0b1117; --surface:#121b23; --sunk:#0c141b; --ink:#e3e9ee; --muted:#93a3af; --line:#25343f; --line-soft:#1b2832;
-  --accent:#f0a43a; --accent-ink:#1b1206; --accent-soft:#33260f;
-  --pass:#4cc27a; --fail:#ff6b5d; --info:#8c9daa; color-scheme:dark;}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;font-variant-numeric:tabular-nums;
-  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 40px}
-.wrap{max-width:1440px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
-header{padding:12px 14px;border-bottom:1px solid var(--line)}
-h1{font-family:var(--f-display);font-weight:700;font-size:22px;letter-spacing:.01em;margin:0;line-height:1}
-.brand{display:flex;align-items:center;gap:10px}
-.logo{width:32px;height:32px;flex:none}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;font-variant-numeric:tabular-nums;margin:0}
 .bench{display:grid;grid-template-columns:372px minmax(0,1fr);gap:20px;align-items:start}
 
 /* ---- control rail ---- */
-aside{background:var(--surface);border:1px solid var(--line);border-radius:10px;min-width:0;display:flex;flex-direction:column;
+aside{background:var(--surface);border:1px solid var(--line);border-radius:0;min-width:0;display:flex;flex-direction:column;
   position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:hidden}
 .rail-body{position:relative;overflow-y:auto;overscroll-behavior:contain;padding:14px 14px 4px;display:flex;flex-direction:column;gap:14px;min-height:0}
 .rail-foot{border-top:1px solid var(--line);padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--surface)}
-.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--sunk);border-radius:7px;padding:3px;gap:3px}
-.seg button{font:600 14px var(--f-body);border:0;border-radius:5px;padding:8px 6px;background:transparent;color:var(--muted);cursor:pointer}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--sunk);border-radius:0;padding:3px;gap:3px}
+.seg button{font:600 14px var(--f-body);border:0;border-radius:0;padding:8px 6px;background:transparent;color:var(--muted);cursor:pointer}
 .seg button:hover{color:var(--ink)}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
 fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;min-width:0}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:13.5px;color:var(--muted);min-width:0}
 label.f small{font-size:12.5px;color:var(--muted)}
-input,select,textarea{font:15px var(--f-body);font-variant-numeric:tabular-nums;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:7px 9px;width:100%;min-width:0}
+input,select,textarea{font:15px var(--f-body);font-variant-numeric:tabular-nums;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:0;padding:7px 9px;width:100%;min-width:0}
 input:hover,select:hover,textarea:hover{border-color:var(--muted)}
 input::placeholder,textarea::placeholder{color:var(--muted);opacity:.8}
 textarea{font:12px/1.5 var(--f-mono);resize:vertical;white-space:pre;overflow:auto;tab-size:2;background:var(--sunk)}
 input:disabled{opacity:.55}
 input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-code{font:12px var(--f-mono);background:var(--sunk);padding:0 3px;border-radius:3px}
+code{font:12px var(--f-mono);background:var(--sunk);padding:0 3px;border-radius:0}
 .btnrow{display:flex;flex-wrap:wrap;gap:6px}
-.btn{font:600 14px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:5px;padding:7px 12px;cursor:pointer}
+.btn{font:600 14px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:0;padding:7px 12px;cursor:pointer}
 .btn:hover{border-color:var(--muted)}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .btn.primary:hover{filter:brightness(1.08)}
-.drop{display:flex;flex-direction:column;align-items:center;gap:2px;border:1.5px dashed var(--line);border-radius:7px;padding:12px 10px;cursor:pointer;background:var(--sunk);text-align:center}
+.drop{display:flex;flex-direction:column;align-items:center;gap:2px;border:1.5px dashed var(--line);border-radius:0;padding:12px 10px;cursor:pointer;background:var(--sunk);text-align:center}
 .drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
 .drop:focus-within{outline:2px solid var(--accent);outline-offset:1px}
 .drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
@@ -87,18 +85,18 @@ details.sec[open] .sv{visibility:hidden}
 .chk{display:flex;align-items:center;gap:8px;font-size:14.5px;cursor:pointer}
 .chk input{width:17px;height:17px;accent-color:var(--accent);flex:none}
 .model{display:flex;flex-direction:column;gap:5px;font-size:13.5px;color:var(--muted)}
-.radios{display:grid;grid-template-columns:repeat(3,auto);background:var(--sunk);border-radius:7px;padding:3px;gap:3px}
+.radios{display:grid;grid-template-columns:repeat(3,auto);background:var(--sunk);border-radius:0;padding:3px;gap:3px}
 .rad{display:block;cursor:pointer;min-width:0}
 .rad input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
-.rad span{display:block;text-align:center;padding:7px 6px;border-radius:5px;color:var(--muted);white-space:nowrap}
+.rad span{display:block;text-align:center;padding:7px 6px;border-radius:0;color:var(--muted);white-space:nowrap}
 .rad b{font-size:13.5px;font-weight:600}
 .rad:hover span{color:var(--ink)}
 .rad:has(input:checked) span{background:var(--surface);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
 .rad:has(input:focus-visible) span{outline:2px solid var(--accent);outline-offset:1px}
-.go{font:700 17px var(--f-display);letter-spacing:.02em;background:var(--accent);color:var(--accent-ink);border:0;border-radius:7px;padding:11px;cursor:pointer;width:100%}
+.go{font:700 17px var(--f-display);letter-spacing:.02em;background:var(--accent);color:var(--accent-ink);border:0;border-radius:0;padding:11px;cursor:pointer;width:100%}
 .go:hover{filter:brightness(1.08)}
 .go:disabled{opacity:.6;cursor:progress;filter:none}
-.prog{height:3px;background:var(--sunk);border-radius:2px;overflow:hidden}
+.prog{height:3px;background:var(--sunk);border-radius:0;overflow:hidden}
 .prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .1s}
 .msg{font-size:13.5px;color:var(--muted);margin:0;max-height:8.8em;overflow-y:auto}
 .msg:empty{display:none}
@@ -106,7 +104,7 @@ details.sec[open] .sv{visibility:hidden}
 
 /* ---- results ---- */
 main{display:flex;flex-direction:column;gap:20px;min-width:0}
-.summary{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.summary{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));background:var(--surface);border:1px solid var(--line);border-radius:0;overflow:hidden}
 .summary.six{grid-template-columns:repeat(10,minmax(0,1fr))}
 .kv{grid-column:span 2;padding:11px 14px 12px;min-width:0;border-right:1px solid var(--line-soft);border-top:1px solid var(--line-soft);margin:-1px -1px 0 0}
 .kv b{display:block;font:400 13px var(--f-body);color:var(--muted)}
@@ -118,7 +116,7 @@ main{display:flex;flex-direction:column;gap:20px;min-width:0}
 .kv.verdict.ok::before{background:var(--pass)} .kv.verdict.bad::before{background:var(--fail)}
 .kv.verdict span{font-size:27px;line-height:1.15}
 .kv.verdict.ok span{color:var(--pass)} .kv.verdict.bad span{color:var(--fail)}
-.screen{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}
+.screen{background:var(--surface);border:1px solid var(--line);border-radius:0;overflow:hidden;min-width:0}
 .bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:10px 14px;border-bottom:1px solid var(--line)}
 .bar h2{font:600 18px var(--f-display);margin:0 auto 0 0;letter-spacing:.01em}
 .bar label{display:flex;align-items:center;gap:6px;font-size:13.5px;color:var(--muted)}
@@ -129,7 +127,7 @@ main{display:flex;flex-direction:column;gap:20px;min-width:0}
 .foot{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;align-items:center;padding:8px 14px;background:var(--plot-bg);color:var(--plot-ink);border-top:1px solid rgba(255,255,255,.07)}
 .readout{font-size:13.5px;min-height:1.4em}
 .legend{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12.5px;color:var(--plot-dim)}
-.legend i{display:inline-block;width:12px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.legend i{display:inline-block;width:12px;height:9px;border-radius:0;margin-right:4px;vertical-align:-1px}
 .tables{display:flex;flex-direction:column;gap:20px;min-width:0}
 details.fold>summary{list-style:none;cursor:pointer;user-select:none}
 details.fold>summary::-webkit-details-marker{display:none}
@@ -157,7 +155,7 @@ td.n{text-align:right}
 td.id{font-weight:600}
 td:last-child,th:last-child{text-align:right;width:1%}
 /* status: a pass is quiet, a fail is loud */
-.pill{display:inline-block;font:600 13px var(--f-body);border-radius:4px}
+.pill{display:inline-block;font:600 13px var(--f-body);border-radius:0}
 .pill.p{color:var(--pass)}
 .pill.f,.pill.a{background:var(--fail);color:#fff;padding:1px 8px}
 .pill.i{color:var(--info);font-weight:400}
@@ -166,9 +164,6 @@ tr.fail td,tbody tr.fail:hover td{background:color-mix(in srgb,var(--fail) 8%,tr
 tr.fail td.id{box-shadow:inset 3px 0 0 var(--fail)}
 .export{padding:14px;display:flex;flex-direction:column;gap:10px}
 .export textarea{height:150px}
-footer{color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:10px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px}
-footer a{color:inherit;text-decoration:underline;text-underline-offset:2px}
-footer a:hover{color:var(--ink)}
 
 @media (max-width:1180px){
   .summary,.summary.six{grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -179,7 +174,7 @@ footer a:hover{color:var(--ink)}
   aside{position:static;max-height:none;overflow:visible}
   .rail-body{overflow:visible}
   /* the Generate action stays reachable while the settings scroll past */
-  .rail-foot{position:sticky;bottom:0;border-radius:0 0 10px 10px;z-index:2;padding-bottom:max(12px,env(safe-area-inset-bottom,0px))}
+  .rail-foot{position:sticky;bottom:0;z-index:2;padding-bottom:max(12px,env(safe-area-inset-bottom,0px))}
   .msg{max-height:5.9em}
 }
 @media (max-width:640px){
@@ -193,34 +188,68 @@ footer a:hover{color:var(--ink)}
   td,th{padding-inline:10px}
 }
 @media (prefers-reduced-motion:reduce){.prog i,.chev,details.sec>summary::before{transition:none}}
-</style>
 
-<div class="wrap">
+/* ---------- beamKit integration ---------- */
+body{font-size:14px}
+.wrap.app{max-width:var(--page-max,1584px);margin:0 auto;display:flex;flex-direction:column;gap:16px;
+  padding:16px max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px))}
+aside{position:sticky;top:64px;max-height:calc(100vh - 80px)}
+input,select{background:var(--sunk);border:0;border-bottom:1px solid var(--cds-border-strong,#8d8d8d)}
+input[type=checkbox],input[type=radio],input[type=range],input[type=file]{border:0;background:none}
+input[type=number]{font-family:var(--f-mono);font-size:13px}
+input:hover,select:hover{background:var(--cds-layer-hover-01,#f7f9fc)}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--cds-focus,#0f62fe);outline-offset:-2px}
+.btn{min-height:32px}
+.btn.primary:hover{filter:none;background:var(--cds-button-primary-hover,#0353e9)}
+.seg{border:0}
+.seg button+button{border-left:0}
+.drop{margin:0}
+.legend{margin:0}
+.st{font-family:var(--f-display);text-transform:uppercase;letter-spacing:.06em;font-size:13px!important;color:var(--muted)}
+.kv b{text-transform:uppercase;letter-spacing:.06em;font-size:11.5px}
+details.fold[open]>summary .chev,details.json[open]>summary .chev,details.sec[open]>summary .chev{transform:rotate(45deg) translate(-2px,-2px)}
+footer.bk a{color:var(--cds-link-primary)}
+th.num{font-family:var(--f-body)}
+.chip.ex,.chip.warn{color:var(--cds-info-text,#0043ce)}
+.chip.warn{background:var(--cds-warn-bg,#fcf4d6);color:var(--cds-warn-text,#8e6a00)}
+.btn.link{color:var(--cds-link-primary,#0f62fe);border-color:var(--cds-link-primary,#0f62fe)}
+.beam .beamdetail{color:var(--cds-link-primary,#0f62fe)}
+.go{display:inline-flex;align-items:center;justify-content:center;gap:8px;font:600 16px var(--f-display);letter-spacing:.01em;min-height:48px}
+.go:hover{filter:none;background:var(--cds-button-primary-hover,#0353e9)}
+.radios{border-radius:0}
+.rad:has(input:checked) span{background:var(--cds-text-primary,#161616);color:var(--cds-background,#f2f4f8);box-shadow:none}
+.cnt{border-radius:12px}
+</style>
+<a class="skip" href="#results">Skip to results</a>
+<div class="shell">
+  <div class="wrap">
+    <a class="shell-name" href="https://jalibakthermk.github.io/"><img src="favicon.svg" alt="" width="24" height="24"> beamSynth <span class="crumb">· Jalib Akther</span></a>
+    <div class="shell-actions">
+      <a href="https://jalibakthermk.github.io/" title="All projects"><svg class="i"><use href="#icon-grid"/></svg> <span class="lbl">Projects</span></a>
+      <a href="https://github.com/jalibakthermk/beamSynth" title="Source code"><svg class="i"><use href="#icon-github"/></svg> <span class="lbl">Code</span></a>
+      <button type="button" data-bk-theme aria-label="Toggle light and dark theme" title="Toggle light / dark">
+        <svg class="i sun"><use href="#icon-sun"/></svg><svg class="i moon"><use href="#icon-moon"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<header class="titleband">
+  <svg class="motif" viewBox="0 0 640 200" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+    <ellipse cx="420" cy="140" rx="210" ry="56"/><ellipse cx="420" cy="140" rx="150" ry="40"/><ellipse cx="420" cy="140" rx="92" ry="25"/><ellipse cx="420" cy="140" rx="44" ry="12"/>
+    <path class="cut" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M0 140H330L366 104H640"/>
+  </svg>
+  <div class="wrap">
+    <p class="eyebrow">Headlamps · beam synthesis · UN R149</p>
+    <h1><b>beamSynth</b> Synthetic beam patterns</h1>
+    <p class="sub">Synthetic low and high beams that meet R149: start from a customer road-requirement JSON or from beam parameters, then review the iso-candela, road illumination and checks, and export an IES file.</p>
+    <span class="privacy"><svg class="i"><use href="#icon-lock"/></svg> Files are processed locally in your browser — nothing is uploaded.</span>
+  </div>
+</header>
+
+<div class="wrap app">
 <div class="bench">
 <aside aria-label="Beam settings">
-  <header>
-  <div class="brand">
-    <svg class="logo" viewBox="0 0 48 48" aria-hidden="true">
-  <defs><clipPath id="lbClip"><path d="M3 25 H22 L31 18 H45 V44 H3 Z"/></clipPath></defs>
-  <rect x="1.5" y="1.5" width="45" height="45" rx="9" fill="var(--plot-bg)"/>
-  <g clip-path="url(#lbClip)">
-    <ellipse cx="25" cy="28" rx="20" ry="9" fill="#1c5c8c"/>
-    <ellipse cx="26" cy="27.5" rx="14" ry="6.2" fill="#179498"/>
-    <ellipse cx="27" cy="27" rx="9" ry="4.2" fill="#d6d046"/>
-    <ellipse cx="27.5" cy="26.6" rx="4.6" ry="2.4" fill="#e24e3a"/>
-  </g>
-  <path d="M5 25 H22 L31 18 H43" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-  <g transform="translate(36 37)" fill="var(--accent)">
-    <circle r="5.2"/>
-    <g stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round">
-      <path d="M0 -7.2V7.2M-7.2 0H7.2M-5.1 -5.1L5.1 5.1M-5.1 5.1L5.1 -5.1"/>
-    </g>
-    <circle r="2" fill="var(--plot-bg)"/>
-  </g>
-</svg>
-    <h1>Beam Synth</h1>
-  </div>
-  </header>
   <div class="rail-body">
   <fieldset id="beamPanel">
     <div class="row2">
@@ -382,7 +411,7 @@ footer a:hover{color:var(--ink)}
   </div>
 </aside>
 
-<main>
+<main id="results">
   <section class="summary" id="summary" aria-label="Result summary"></section>
   <details class="screen fold" id="foldBlk" open hidden>
     <summary class="bar"><span class="chev" aria-hidden="true"></span><h2>Held back by</h2><span class="note">what stops each unmet target or failed check</span></summary>
@@ -433,10 +462,16 @@ footer a:hover{color:var(--ink)}
 </main>
 </div>
 
-<footer>
-  <span>Synthetic intensity model: a square-root fall-off core with spread and foreground lobes, an R149-style cut-off and a glare-floor term, fitted with an evolution-strategy solver.</span>
-  <span>© 2026 Jalib Akther · Released under the <a href="https://github.com/jalibakthermk/beamSynth/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a></span>
-</footer>
+</div>
+<div class="wrap foot">
+  <footer class="bk">
+    <span>beamSynth</span>
+    <span>© 2026 Jalib Akther</span>
+    <span><svg class="i"><use href="#icon-pin"/></svg> Thrissur, India</span>
+    <span><a href="https://github.com/jalibakthermk/beamSynth/blob/main/LICENSE">MIT License</a></span>
+    <a href="https://jalibakthermk.github.io/">More lighting tools →</a>
+    <span class="disc">Synthetic intensity model: a square-root fall-off core with spread and foreground lobes, an R149-style cut-off and a glare-floor term, fitted with an evolution-strategy solver. Results are engineering estimates; check them against measured data before relying on them.</span>
+  </footer>
 </div>
 
 <script>

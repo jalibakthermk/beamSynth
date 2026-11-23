@@ -395,9 +395,9 @@ function drawRoad() {
   // vehicle
   g.fillStyle = "#e6eef4"; g.fillRect(X(0) - 1, Y(-0.9), 4, Y(0.9) - Y(-0.9));
   { const z = S.cfg.roadFlux.zone;
-    g.setLineDash([8, 4]); g.strokeStyle = css("--accent"); g.lineWidth = 1.5;
+    g.setLineDash([8, 4]); g.strokeStyle = (css("--plot-accent") || "#78a9ff"); g.lineWidth = 1.5;
     g.strokeRect(X(z.x1), Y(-z.left), X(Math.min(z.x2, view.x1 + 5)) - X(z.x1), Y(z.right) - Y(-z.left)); g.setLineDash([]); g.lineWidth = 1;
-    g.fillStyle = css("--accent"); g.font = "600 10.5px " + css("--f-body"); g.textAlign = "right";
+    g.fillStyle = (css("--plot-accent") || "#78a9ff"); g.font = "600 10.5px " + css("--f-body"); g.textAlign = "right";
     g.fillText("Flux on road zone", Math.min(X(z.x2), box.x + box.w) - 4, Y(-z.left) + 13); }
   if ($("roadPts").checked) {
     const pass = css("--pass"), fail = css("--fail");
@@ -554,6 +554,8 @@ function renderAll() { if (!S.res) return; recomputeRoad(); renderSummary(); ren
 ["roadRange", "roadPts"].forEach(id => $(id).addEventListener("change", () => S.res && drawRoad()));
 $("plane").addEventListener("change", () => S.res && renderAll());
 let rz; new ResizeObserver(() => { clearTimeout(rz); rz = setTimeout(() => S.res && (drawIso(), drawRoad()), 120); }).observe(document.querySelector("main"));
+// beamKit theme toggle: redraw the plots so their accent colours follow the theme
+document.addEventListener("DOMContentLoaded", () => { if (window.beamKit) beamKit.theme.onChange(() => S.res && (drawIso(), drawRoad())); });
 const redrawTheme = () => S.res && (drawIso(), drawRoad());
 try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redrawTheme); } catch (e) { }
 new MutationObserver(redrawTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
