@@ -12,6 +12,7 @@ It runs entirely in the browser: open `docs/index.html`, or the GitHub Pages sit
     - **Hot spot position** (H, V in degrees). Defaults: 75R (1.15R 0.57D) for Class C or V, mirrored to 75L in left-hand traffic; 0.86D on V-V for the symmetric classes; H-V for the high beam. The solver holds the peak within about 0.1–0.3° of it.
     - **Q factor** (0–1, default 0.7) shapes the bottom of the beam; the slider runs from "+" shape at 0 to strong smile at 1. Q does not move the hot spot or change the H spread.
     - **Lobe limits** (optional, blank = no limit): **Lobe H spread** (±°) is the widest the two light lobes may reach sideways, and **Lobe bottom** (° D) the lowest they may reach. Both are measured where a lobe falls to 5 % of its own peak. Without them the foreground lobe can spread to about ±90° and 40° down, which lights a bright patch just in front of the vehicle. At 0.65 m mounting height, 10° D lands about 3.7 m ahead, 6° D about 6.2 m and 4.5° D about 8.3 m. Tight limits can leave flux or V spread short of target; the H and V spread tiles show the lobes' reach and mark a lobe held at a limit. Suggested start: ±40° H and 10° D, with a low-beam V spread target of about 8°.
+  - **HSPR target:** give a target HSPR score (GTB Headlight Safety Performance Rating, Recommended Practice SEP2023) or a target for each criterion. A score is turned into criterion targets that all earn the same points, so a beam that meets them all scores at least that much; each target can then be edited. The tool generates the lowest-flux beam that passes the R149 table and reaches every target: a minimum for each range, width and flux value, a maximum for glare. Passing beam: Zones A–E, flux and glare. Driving beam: Points A–E, Zone E and flux. The lamp pair sits at the mounting height and separation set under Vehicle and road.
   - Requirement files can be uploaded (click or drag and drop) or pasted.
   - **Beam function and class** are set once, above the two input modes, and apply to both. A requirement file that names `function` and `class` sets them when it is loaded.
 - **Lowest flux by default.** In road requirement mode with no flux target, the tool returns the beam that meets ECE and every road check with the least emitted flux.
@@ -41,6 +42,10 @@ It runs entirely in the browser: open `docs/index.html`, or the GitHub Pages sit
   - **Download IES:** LM-63-2002, photometric type B (H-V), absolute candela, one lamp, saved with a name such as `beamsynth_low_class-C_RHT_30081cd.ies`. Load it into road-illuminate to verify the beam. The file can also be copied as text.
   - The requirement set back in road-illuminate format.
   - The fitted model parameters as JSON.
+
+## HSPR rating
+
+Every generated beam gets an HSPR rating for its function (criterion values, points, score and verbal rank), computed from the beam model the same way as [HSPRevaluate](https://github.com/jalibakthermk/hsprevaluate): nearest point of a 0.05° grid, far-to-near searches, vertical illuminance on a plane facing the vehicle, both lamps on. Two differences from the reference software: unmet Zone A, B or C lines count as 0 m (the reference leaves them out), and left-hand traffic is rated as its mirror image. On the default beams the criterion values match HSPRevaluate exactly and the flux within 0.2 %. In HSPR target mode the solve uses a quicker version of each criterion (2 m steps, interpolated crossings); the rating shown is always the full one.
 
 ## Road requirement format
 

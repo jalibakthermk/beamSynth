@@ -120,5 +120,21 @@ t("road-illuminate format round-trips", () => {
   ok(JSON.stringify(a.map(x => [x.type, x.x, x.y, x.min, x.max])) === JSON.stringify(b.map(x => [x.type, x.x, x.y, x.min, x.max])), "checks changed");
 });
 
+t("HSPR: targets from a score give exactly that score; every beam gets a rating", () => {
+  for (const beam of ["low", "high"]) for (const s of [2, 3, 4]) { const r = C.hsprScore(beam, C.hsprTargets(beam, s)); ok(Math.abs(r.score - s) < 0.02, `${beam} target ${s} scores ${r.score}`); }
+  const r = solve({ beam: "low", cls: "C", mode: "param" }).out.res;
+  ok(r.hspr && isFinite(r.hspr.score) && r.hspr.rows.length === 9, "no HSPR rating on the default low beam");
+  return `default low beam rates ${r.hspr.score} (${r.hspr.rank})`;
+});
+t("HSPR target mode: the beam passes R149 and reaches the score it was asked for (low and high beam, score 3)", () => {
+  const out = [];
+  for (const [beam, cls] of [["low", "C"], ["high", "B"]]) {
+    const r = solve({ beam, cls, mode: "hspr", hsprScore: 3 }).out.res;
+    ok(r.pass, beam + ": ECE table fails");
+    ok(r.hspr.score >= 3 - 0.01, `${beam}: HSPR ${r.hspr.score} below the target 3`);
+    out.push(`${beam} ${r.hspr.score}, ${Math.round(r.flux)} lm`);
+  }
+  return out.join("; ");
+});
 console.log(`\n${n - failed} of ${n} tests passed`);
 process.exit(failed ? 1 : 0);

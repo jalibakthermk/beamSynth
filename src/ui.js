@@ -53,7 +53,7 @@ function setHotDefault() {
 $("traffic").addEventListener("change", setHotDefault);
 $("smile").addEventListener("input", () => { $("smileVal").textContent = (+$("smile").value).toFixed(2); });
 $("fn").onchange = () => {
-  S.beam = $("fn").value; fillClasses(); setDefaults(); syncCut(); showTable();
+  S.beam = $("fn").value; fillClasses(); setDefaults(); syncCut(); showTable(); if (S.mode === "hspr") fillHspr();
 };
 $("cls").onchange = () => { setDefaults(); syncCut(); showTable();
 };
@@ -119,10 +119,24 @@ function syncFromJson() {
 $("roadJson").addEventListener("change", syncFromJson);
 $("physOn").addEventListener("change", () => { $("physBox").hidden = !$("physOn").checked; });
 function setMode(m) {
-  S.mode = m; $("mRoad").setAttribute("aria-pressed", m === "road"); $("mParam").setAttribute("aria-pressed", m === "param");
-  $("roadPanel").hidden = m !== "road"; $("paramPanel").hidden = m !== "param";
+  S.mode = m; $("mRoad").setAttribute("aria-pressed", m === "road"); $("mParam").setAttribute("aria-pressed", m === "param"); $("mHspr").setAttribute("aria-pressed", m === "hspr");
+  $("roadPanel").hidden = m !== "road"; $("paramPanel").hidden = m !== "param"; $("hsprPanel").hidden = m !== "hspr";
+  if (m === "hspr") fillHspr();
 }
-$("mRoad").onclick = () => setMode("road"); $("mParam").onclick = () => setMode("param");
+$("mRoad").onclick = () => setMode("road"); $("mParam").onclick = () => setMode("param"); $("mHspr").onclick = () => setMode("hspr");
+
+// ---------- HSPR target inputs ----------
+function fillHspr(keep) {
+  const beam = $("fn").value, sc = num("hsScore") ?? 3, t = hsprTargets(beam, sc);
+  $("hsRank").textContent = hsprRank(sc);
+  if (keep && $("hsTargets").dataset.beam === beam) return;
+  $("hsTargets").dataset.beam = beam;
+  $("hsTargets").innerHTML = HSPR_CRIT[beam].map(c => `<label class="hs-row"><span>${c.name}<small>${c.desc}</small></span><span class="in">${c.key === "Glare" ? "≤" : "≥"}<input type="number" id="hsT_${c.key}" step="${c.key === "Glare" ? 0.01 : c.unit === "lm" ? 10 : 0.5}" value="${fmtIn(t[c.key], c.key === "Glare" ? 3 : 1)}"> ${c.unit}</span></label>`).join("");
+}
+const fmtIn = (x, d) => String(Math.round(x * 10 ** d) / 10 ** d);
+$("hsFill").onclick = () => { $("hsTargets").dataset.beam = ""; fillHspr(); };
+$("hsScore").addEventListener("input", () => { $("hsRank").textContent = hsprRank(num("hsScore") ?? 0); });
+$("hsScore").addEventListener("change", () => { $("hsTargets").dataset.beam = ""; fillHspr(); });
 
 // ---------- generate ----------
 function num(id) { const x = parseFloat($(id).value); return isFinite(x) ? x : null; }
@@ -159,10 +173,16 @@ function gather() {
   const H = num("mh") || 0.65, sp = num("sp") || 1.4;
   const isSet = Array.isArray(road);                       // bare road-illuminate requirement set
   const rawChecks = isSet ? road : road ? (road.checks || road.points || []) : [];
-  const applies = S.mode === "road" || isSet || (road && road.function === S.beam);
+  const applies = S.mode !== "hspr" && (S.mode === "road" || isSet || (road && road.function === S.beam));
   const checks = applies ? normalizeChecks(rawChecks) : [];
-  let targets;
-  if (S.mode === "road") {
+  let targets, hspr = null;
+  if (S.mode === "hspr") {
+    targets = { imax: null, flux: null, spreadH: null, spreadV: null };
+    const tg = {};
+    for (const cr of HSPR_CRIT[S.beam]) { const x = num("hsT_" + cr.key); if (x != null) { if (x < 0) throw new Error(`HSPR target for ${cr.name} must not be negative.`); tg[cr.key] = x; } }
+    if (!Object.keys(tg).length) throw new Error("Give at least one HSPR criterion target, or press Fill from score.");
+    hspr = { score: num("hsScore"), targets: tg };
+  } else if (S.mode === "road") {
     const t = (road && !isSet && road.targets) || {};
     targets = { imax: t.imax || null, flux: t.flux_lm || null, spreadH: t.spreadH_deg || null, spreadV: t.spreadV_deg || null };
     if (!checks.length) throw new Error("No valid checks found. Paste a road-illuminate requirement set (point, range, width, zone) or an object with a \"checks\" list.");
@@ -188,7 +208,7 @@ function gather() {
   if (!(rfZone.x2 > rfZone.x1) || !(rfZone.left + rfZone.right > 0)) throw new Error("Flux on road zone: 'to' must be beyond 'from', and the width must be more than 0.");
   const rfTarget = num("rfT");
   const roadFlux = { zone: rfZone, target: rfTarget && rfTarget > 0 ? rfTarget : null, lamps: $("rfL").value, height: H, spacing: sp, traffic: lht ? "LHT" : "RHT" };
-  return { beam: S.beam, cls: $("cls").value, key: tableKey(), sym, cut, table, lht, H, sp, checks, evalH, targets, roadFlux, shape, aim, physical, lane, mode: S.mode };
+  return { beam: S.beam, cls: $("cls").value, key: tableKey(), sym, cut, table, lht, H, sp, checks, evalH, targets, roadFlux, shape, aim, physical, lane, hspr, mode: S.mode };
 }
 
 function generate() {
@@ -220,7 +240,7 @@ function generate() {
     const physTxt = capRow && capRow.pass === false ? ` Imax is above the aperture limit of ${fmt(ph.imaxCap)} cd (LED luminance × aperture area).`
       : ph && ph.imaxRequested ? ` The requested ${fmt(ph.imaxRequested)} cd is above the aperture limit of ${fmt(ph.imaxCap)} cd (LED luminance × aperture area), so Imax is held at the limit.` : "";
     const leftTxt = c.leftOut && S.res.roadRows.some(r => r.pass === false && r.id === c.leftOut) ? ` Left out: “${c.leftOut}”, which conflicts with the other checks.` : "";
-    msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s${loopsTxt}. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : S.res.aimFailCount ? `ECE passes at nominal aim, but ${S.res.aimFailCount} check${S.res.aimFailCount > 1 ? "s fail" : " fails"} inside the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : S.res.aim ? `All ECE checks pass across the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : "All ECE checks pass.") + (c.mode !== "road" ? "" : nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : " All road checks pass.") + leftTxt + prefTxt + rfTxt + physTxt, nf > 0 || S.res.aimFailCount > 0);
+    msg(`Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s${loopsTxt}. ` + (nf ? `${nf} ECE check${nf > 1 ? "s" : ""} fail: closest compromise shown.` : S.res.aimFailCount ? `ECE passes at nominal aim, but ${S.res.aimFailCount} check${S.res.aimFailCount > 1 ? "s fail" : " fails"} inside the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : S.res.aim ? `All ECE checks pass across the aim box (±${fmt(S.res.aim.v, 2)}° V, ±${fmt(S.res.aim.h, 2)}° H).` : "All ECE checks pass.") + (c.mode !== "road" ? "" : nr ? ` ${nr} road target${nr > 1 ? "s" : ""} missed.` : " All road checks pass.") + hsprTxt(c) + leftTxt + prefTxt + rfTxt + physTxt, nf > 0 || S.res.aimFailCount > 0);
     $("iesOut").value = "";
     $("progBar").style.width = "0";
     renderAll(); showResults();
@@ -528,6 +548,28 @@ function recomputeRoad() {
   S.res.roadRows = rd.map(rc => roadRow(rc, checkValue(S.P, rc)));
 }
 
+// ---------- HSPR rating of the solved beam ----------
+function hsprMiss(c, v, t) { return t == null ? null : c.key === "Glare" ? v <= t * 1.0005 : v >= t * 0.9995; }
+function hsprTxt(c) {
+  const h = S.res.hspr; if (!h) return "";
+  if (c.mode !== "hspr") return ` HSPR ${fmt(h.score, 2)} (${h.rank}).`;
+  const miss = h.rows.filter(r => hsprMiss(r, r.value, h.targets[r.key]) === false).length;
+  return ` HSPR ${fmt(h.score, 2)} (${h.rank}), target ${fmt(h.target, 1)}` + (miss ? `; ${miss} criterion target${miss > 1 ? "s" : ""} missed.` : "; every criterion target met.");
+}
+function renderHspr() {
+  const h = S.res.hspr, c = S.cfg;
+  if (!h) { $("hsTbl").innerHTML = ""; $("hsCount").textContent = ""; $("hsNote").textContent = ""; return; }
+  const tg = c.mode === "hspr" ? h.targets : null, dp = r => r.unit === "lm" ? (r.key === "Glare" ? 3 : 0) : 1;
+  $("hsCount").textContent = `Score ${fmt(h.score, 2)}, ${h.rank}`;
+  $("hsCount").className = "cnt" + (tg ? (h.score >= h.target - 0.005 ? " p" : " f") : "");
+  $("hsNote").textContent = `${c.beam === "low" ? "Passing beam" : "Driving beam"}, lamp pair ${fmt(h.H, 2)} m high, ${fmt(h.sep, 2)} m apart` + (tg ? `, target ${fmt(h.target, 1)}` : ", rated only");
+  $("hsTbl").innerHTML = `<thead><tr><th>Criterion</th><th>What</th>${tg ? "<th class='n'>Target</th>" : ""}<th class='n'>Value</th><th class='n'>Points</th><th class='n'>Weight</th>${tg ? "<th>Result</th>" : ""}</tr></thead><tbody>` +
+    h.rows.map(r => { const t = tg ? tg[r.key] : null, ok = hsprMiss(r, r.value, t);
+      return `<tr class="${ok === false ? "fail" : ""}"><td class="id">${r.name}</td><td>${r.desc}</td>${tg ? `<td class="n">${t == null ? "—" : (r.key === "Glare" ? "≤ " : "≥ ") + fmt(t, dp(r)) + " " + r.unit}</td>` : ""}<td class="n">${fmt(r.value, dp(r))} ${r.unit}</td><td class="n">${fmt(r.points, 2)}</td><td class="n">${fmt(r.w, 2)}</td>${tg ? `<td>${t == null ? pill(null) : pill(ok)}</td>` : ""}</tr>`; }).join("") +
+    `<tr class="hs-sum"><td>Score</td><td>weighted points ${fmt(h.sum, 2)}, benchmarks ${fmt(HSPR_BENCH[c.beam][0], 2)} and ${fmt(HSPR_BENCH[c.beam][1], 2)}</td>${tg ? `<td class="n">≥ ${fmt(h.target, 1)}</td>` : ""}<td class="n">${fmt(h.score, 2)}</td><td class="n">${h.rank}</td><td></td>${tg ? `<td>${pill(h.score >= h.target - 0.005)}</td>` : ""}</tr></tbody>` +
+    (h.warn.length ? `<tbody><tr><td colspan="7" class="note" style="white-space:normal">${h.warn.join(" ")}</td></tr></tbody>` : "") +
+    `<tbody><tr><td colspan="7" class="note" style="white-space:normal">Rated from the beam model, the same way as HSPRevaluate (GTB SEP2023, TU Darmstadt reference method). Unmet Zone A, B or C lines count as 0 m. For a certified value, rate the exported IES file in HSPRevaluate or the reference software.</td></tr></tbody>`;
+}
 // lobe reach at 5 % of each lobe's own peak, shown under the spread tiles
 function lobeNote(L, k) {
   if (!L) return "";
@@ -549,7 +591,7 @@ function renderBlocking() {
     return `<li><b>${esc(m.what)}</b> <span>${head}</span><br>${why.charAt(0).toUpperCase() + why.slice(1)}</li>`;
   }).join("");
 }
-function renderAll() { if (!S.res) return; recomputeRoad(); renderSummary(); renderBlocking(); renderTables(); setCount("ecCount", S.res.rows); setCount("rdCount", S.res.roadRows); drawIso(); drawRoad(); }
+function renderAll() { if (!S.res) return; recomputeRoad(); renderSummary(); renderBlocking(); renderTables(); renderHspr(); setCount("ecCount", S.res.rows); setCount("rdCount", S.res.roadRows); drawIso(); drawRoad(); }
 ["isoUnit", "isoRange", "isoPts"].forEach(id => $(id).addEventListener("change", () => S.res && drawIso()));
 ["roadRange", "roadPts"].forEach(id => $(id).addEventListener("change", () => S.res && drawRoad()));
 $("plane").addEventListener("change", () => S.res && renderAll());
@@ -645,7 +687,7 @@ $("paramCopy").onclick = () => {
 };
 
 // ---------- collapsible tables (remembered in this browser) ----------
-["foldEce", "foldRoad"].forEach(id => {
+["foldEce", "foldHspr", "foldRoad"].forEach(id => {
   const el = $(id), key = "beamsynth-" + id;
   try { if (localStorage.getItem(key) === "closed") el.open = false; } catch (e) { }
   el.addEventListener("toggle", () => { try { localStorage.setItem(key, el.open ? "open" : "closed"); } catch (e) { } });

@@ -459,13 +459,182 @@ function compileRoad(spec, beam, cut) {
     } else if (c.type === "width") {
       o.ys = []; for (let y = -40; y <= 40 + 1e-9; y += 0.25) o.ys.push(y);
       o.pts = o.ys.map(y => smp(c.x, y, z));
-    } else if (c.type === "zone") {
+    } else if (c.type === "hspr") compileHspr(o, spec, beam, cut);
+    else if (c.type === "zone") {
       const nx = Math.max(2, Math.min(40, Math.ceil((c.x2 - c.x1) / 1.5))), ny = Math.max(2, Math.min(16, Math.ceil((c.y2 - c.y1) / 0.4)));
       o.pts = [];
       for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) o.pts.push(smp(c.x1 + (c.x2 - c.x1) * i / nx, c.y1 + (c.y2 - c.y1) * j / ny, z));
     }
     return o;
   });
+}
+
+
+// ---------- HSPR: GTB Headlight Safety Performance Rating (Recommended Practice SEP2023, zones of CIE S 021/E:2011) ----------
+// Criterion definitions, reference statistics (p1 = 1 point, p2 = 2 points), weights and benchmarks follow the GTB document and the
+// TU Darmstadt reference software, as in the HSPRevaluate tool. Coordinates: x forward, y lateral (+ right), z height above the road;
+// both lamps of the pair at height H, y = -sep/2 and +sep/2. Illuminance is vertical, on a plane facing the vehicle.
+// Left-hand traffic is rated as its mirror image, so the internal (right-hand) frame is rated in every case.
+const HSPR_CRIT = {
+  low: [
+    { key: "A", name: "Zone A", desc: "range, straight road", unit: "m", p1: 71.6, p2: 95.1, w: 1.5 },
+    { key: "B", name: "Zone B", desc: "range on curves (lines 5° right)", unit: "m", p1: 71.5, p2: 138.4, w: 1 },
+    { key: "C", name: "Zone C", desc: "range, offside verge at 0.25 m", unit: "m", p1: 32.7, p2: 48.4, w: 1 },
+    { key: "Doff", name: "Zone D offside", desc: "width at 30–50 m, left", unit: "m", p1: 4.8, p2: 12.5, w: 0.75 },
+    { key: "Dnear", name: "Zone D nearside", desc: "width at 30–50 m, right", unit: "m", p1: 7.6, p2: 16.3, w: 0.75 },
+    { key: "Eoff", name: "Zone E offside", desc: "width at 10, 20 m, 0.25 m high, left", unit: "m", p1: 5.9, p2: 9.6, w: 0.5 },
+    { key: "Enear", name: "Zone E nearside", desc: "width at 10, 20 m, 0.25 m high, right", unit: "m", p1: 6.6, p2: 10.5, w: 0.5 },
+    { key: "Flux", name: "Luminous flux", desc: "lamp pair, 45°L–45°R, 15°D–5°U", unit: "lm", p1: 747.6, p2: 1785.1, w: 1 },
+    { key: "Glare", name: "Glare", desc: "weighted flux into the oncoming eye zone at 50 m", unit: "lm", p1: 0.73, p2: 0.27, w: 1 }
+  ],
+  high: [
+    { key: "PA", name: "Point A", desc: "range straight ahead", unit: "m", p1: 133.3, p2: 235.0, w: 2 },
+    { key: "PB", name: "Point B", desc: "range 11.3° left", unit: "m", p1: 29.1, p2: 61.0, w: 0.8 },
+    { key: "PC", name: "Point C", desc: "range upward (about 5° U)", unit: "m", p1: 31.5, p2: 63.3, w: 0.4 },
+    { key: "PD", name: "Point D", desc: "range 11.3° right", unit: "m", p1: 41.9, p2: 81.4, w: 0.8 },
+    { key: "PE", name: "Point E", desc: "range downward (about 1° D)", unit: "m", p1: 134.2, p2: 207.7, w: 1 },
+    { key: "Eoff", name: "Zone E offside", desc: "width at 10, 20 m, 0.25 m high, left", unit: "m", p1: 5.5, p2: 10.5, w: 1 },
+    { key: "Enear", name: "Zone E nearside", desc: "width at 10, 20 m, 0.25 m high, right", unit: "m", p1: 5.9, p2: 10.9, w: 1 },
+    { key: "Flux", name: "Luminous flux", desc: "lamp pair, 45°L–45°R, 5°D–10°U", unit: "lm", p1: 1114.1, p2: 3126.1, w: 1 }
+  ]
+};
+const HSPR_BENCH = { low: [11.15, 17.61], high: [11.31, 19.23] };
+const HSPR_RANKS = ["Standard", "Good", "Advanced", "Excellent", "Premium", "Premium+"];
+const HSPR_GLARE_W = [[0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2], [0.2, 0.2, 0.5, 0.5, 0.5, 0.5, 0.5, 0.2], [0.2, 0.2, 0.5, 1, 1, 1, 0.5, 0.2], [0.2, 0.2, 0.5, 1, 1, 1, 0.5, 0.2], [0.2, 0.2, 0.5, 0.5, 0.5, 0.5, 0.5, 0.2]];
+const HSPR_DEF = {   // geometry of every criterion
+  A: { kind: "range", lines: [0, 1.5, 3], theta: 0, z: 0 }, B: { kind: "range", lines: [0, 1.5, 3], theta: 5, z: 0 }, C: { kind: "range", lines: [-3, -4.5, -6], theta: 0, z: 0.25 },
+  Doff: { kind: "width", side: -1, dists: [30, 40, 50], z: 0 }, Dnear: { kind: "width", side: 1, dists: [30, 40, 50], z: 0 },
+  Eoff: { kind: "width", side: -1, dists: [10, 20], z: 0.25 }, Enear: { kind: "width", side: 1, dists: [10, 20], z: 0.25 },
+  PA: { kind: "ray", dy: 0, dz: 0 }, PB: { kind: "ray", dy: -20, dz: 0 }, PC: { kind: "ray", dy: 0, dz: 9 }, PD: { kind: "ray", dy: 20, dz: 0 }, PE: { kind: "ray", dy: 0, dz: -2 },
+  Flux: { kind: "flux" }, Glare: { kind: "glare" }
+};
+const hsprRound = (x, n) => { const k = Math.pow(10, n); return Math.round(x * k) / k; };
+const hsprRank = N => HSPR_RANKS[Math.max(0, Math.min(5, Math.floor(N)))];
+const hsprPoints = (v, c) => (v - c.p1) / (c.p2 - c.p1) + 1;
+// single-function score from criterion values (GTB section 7)
+function hsprScore(beam, values) {
+  const crit = HSPR_CRIT[beam], b = HSPR_BENCH[beam];
+  const rows = crit.map(c => { const v = values[c.key], pts = hsprRound(hsprPoints(v, c), 3); return Object.assign({}, c, { value: v, points: pts, weighted: pts * c.w }); });
+  const sum = rows.reduce((s, r) => s + r.weighted, 0), N = hsprRound(4 / (b[1] - b[0]) * (sum - b[0]) + 1, 2);
+  return { rows, sum, score: N, rank: hsprRank(N) };
+}
+// criterion targets for a wanted score: every criterion gets the same points, so the weighted sum gives exactly that score
+function hsprTargets(beam, score) {
+  const crit = HSPR_CRIT[beam], b = HSPR_BENCH[beam], W = crit.reduce((s, c) => s + c.w, 0);
+  const pts = ((score - 1) * (b[1] - b[0]) / 4 + b[0]) / W, out = {};
+  for (const c of crit) out[c.key] = Math.max(0, c.p1 + (pts - 1) * (c.p2 - c.p1));
+  return out;
+}
+// HSPR criteria as road checks (type "hspr") for the solve: a minimum for every criterion, a maximum for glare
+function hsprChecks(beam, targets) {
+  if (!targets) return [];
+  return HSPR_CRIT[beam].filter(c => targets[c.key] != null && isFinite(targets[c.key])).map(c => Object.assign({ type: "hspr", hk: c.key, label: "HSPR " + c.name, w: 1 },
+    c.key === "Glare" ? { max: targets[c.key] } : { min: targets[c.key] }));
+}
+// compiled form for the solve: fixed sample points, so each value is a quick sum
+function compileHspr(o, spec, beam, cut) {
+  const smp = makeSampler(Object.assign({}, spec, { traffic: "RHT", plane: "vertical" }), beam, cut), d = HSPR_DEF[o.hk], H = spec.height, s2 = spec.spacing / 2, P0 = { beam, cut };
+  const series = [];
+  if (d.kind === "range") {
+    const ss = []; for (let s = 2; s <= 200; s += 2) ss.push(s); for (let s = 204; s <= 400; s += 4) ss.push(s);
+    const st = Math.sin(d.theta * DEG), ct = Math.cos(d.theta * DEG);
+    for (const thr of [1, 3, 5]) for (const y0 of d.lines) series.push({ thr, par: ss.map(s => s * ct), pts: ss.map(s => smp(s * ct, y0 + s * st, d.z)) });
+  } else if (d.kind === "width") {
+    const ys = []; for (let y = 0.25; y <= 20 + 1e-9; y += 0.25) ys.push(y);
+    for (const x of d.dists) series.push({ thr: 3, par: ys, pts: ys.map(y => smp(x, d.side * y, d.z)) });
+  } else if (d.kind === "ray") {
+    const n = Math.hypot(d.dy, H + d.dz, 100), ss = []; for (let s = 2; s <= 800; s += 2) ss.push(s);
+    series.push({ thr: 3, par: ss, pts: ss.map(s => smp(s * 100 / n, s * d.dy / n, s * (H + d.dz) / n)) });
+  } else if (d.kind === "flux") {
+    const vb = beam === "low" ? [-15, 5] : [-5, 10], pts = [];
+    for (let h = -44.5; h < 45; h += 1) for (let v = vb[0] + 0.25; v < vb[1]; v += 0.5) pts.push({ h, v, m: maskAt(P0, h, v), f: 2 * 0.5 * DEG * DEG });
+    o.dirs = [pts];
+  } else if (d.kind === "glare") {
+    const pts = [], x = 50, rows = 5, cols = 8, y1 = -7.9, y2 = 1.3, z1 = 0.93, z2 = 1.62, k = 2;
+    for (let r = 0; r < rows * k; r++) for (let q = 0; q < cols * k; q++) {
+      const z = z2 - (r + 0.5) * (z2 - z1) / (rows * k), y = y1 + (q + 0.5) * (y2 - y1) / (cols * k);
+      const wt = HSPR_GLARE_W[Math.floor(r / k)][Math.floor(q / k)], dA = (z2 - z1) / (rows * k) * (y2 - y1) / (cols * k);
+      for (const ly of [-s2, s2]) {
+        const dy = y - ly, dz = z - H, d2 = x * x + dy * dy + dz * dz, h = Math.atan2(dy, x) / DEG, v = Math.atan2(dz, Math.hypot(x, dy)) / DEG;
+        pts.push({ h, v, m: maskAt(P0, h, v), f: wt * dA / d2 });
+      }
+    }
+    o.dirs = [pts];
+  }
+  o.series = series; o.unit = HSPR_CRIT[beam].find(c => c.key === o.hk).unit;
+  return o;
+}
+function hsprValue(P, c) {
+  if (c.dirs) return { val: luxOf(P, c.dirs[0]) };
+  let sum = 0;
+  for (const se of c.series) {
+    let last = -1, Eprev = 0, Elast = 0;
+    for (let i = se.pts.length - 1; i >= 0; i--) { const E = luxOf(P, se.pts[i]); if (E > se.thr) { last = i; Elast = E; break; } Eprev = E; }
+    if (last < 0) continue;
+    sum += last === se.pts.length - 1 ? se.par[last] : crossing(se.par[last], Elast, se.par[last + 1], Eprev, se.thr);
+  }
+  return { val: sum / c.series.length };
+}
+// Full rating of a solved beam, as the reference does it: nearest point of a 0.05° grid (45°L–45°R, 15°D–15°U, edge value beyond),
+// searches from far to near in 0.5 m steps (0.1 m for widths), zone values rounded to 0.001 m. Unmet Zone A/B/C lines count as 0 m.
+function hsprRate(P, beam, H, sep) {
+  const I = (h, v) => evalI(P, Math.round(Math.max(-45, Math.min(45, h)) / 0.05) * 0.05, Math.round(Math.max(-15, Math.min(15, v)) / 0.05) * 0.05);
+  const lamps = [-sep / 2, sep / 2];
+  const Ev = (x, y, z) => {   // x lateral (+ right), y height, z forward (as the reference)
+    let E = 0;
+    for (const lx of lamps) { const dx = x - lx, dy = y - H, d2 = dx * dx + dy * dy + z * z; E += I(Math.atan(dx / z) / DEG, Math.atan(dy / Math.sqrt(dx * dx + z * z)) / DEG) / d2 * (z / Math.sqrt(d2)); }
+    return E;
+  };
+  const v = {}, warn = [];
+  const range = (key) => {
+    const d = HSPR_DEF[key], st = Math.sin(d.theta * DEG), ct = Math.cos(d.theta * DEG), vals = [];
+    let miss = 0;
+    for (const lx of [1, 3, 5]) for (const x0 of d.lines) {
+      let f = 0; for (let s = 400; s > 0; s -= 0.5) if (Ev(x0 + s * st, d.z, s * ct) > lx) { f = s * ct; break; }
+      if (!f) miss++; vals.push(f);
+    }
+    if (miss) warn.push(`${key}: ${miss} of 9 lines never reach their lux level and count as 0 m (the reference software leaves them out).`);
+    return hsprRound(vals.reduce((a, b) => a + b, 0) / vals.length, 3);
+  };
+  const width = key => {
+    const d = HSPR_DEF[key], vals = [];
+    for (const z of d.dists) { let f = 0; for (let k = 200; k > 0; k--) if (Ev(d.side * k * 0.1, d.z, z) > 3) { f = k * 0.1; break; } vals.push(f); }
+    return hsprRound(vals.reduce((a, b) => a + b, 0) / vals.length, 3);
+  };
+  const ray = key => {
+    const d = HSPR_DEF[key], hy = H + d.dz, n = Math.hypot(d.dy, hy, 100);
+    for (let s = 800; s > 0; s -= 0.5) if (Ev(s * d.dy / n, s * hy / n, s * 100 / n) > 3) return s;
+    warn.push(`${key}: 3 lx not reached along the ray; counted as 0 m.`); return 0;
+  };
+  const flux = vb => {   // lamp pair = 2 x one lamp; solid angle as the reference (tan x tan, no cos term)
+    const st = 0.05, w = Math.tan(st * DEG) ** 2; let F = 0;
+    for (let h = -45; h < 45 - 1e-9; h += st) for (let vv = vb[0]; vv < vb[1] - 1e-9; vv += st) F += I(h + st / 2, vv + st / 2);
+    return hsprRound(2 * F * w, 2);
+  };
+  const glare = () => {
+    let total = 0; const z = 50, hres = 0.01, vres = 0.0138;
+    for (const lx of lamps) {
+      const W = Math.round((1.3 - hres / 2 - (-7.9 + hres / 2)) / hres) + 1, Hn = Math.round((1.62 - 0.93 - vres) / vres) + 1;
+      for (let r = 0; r < Hn; r++) {
+        const y = 1.62 - vres / 2 - r * vres, wr = Math.floor(r / (Hn / 5)) % 5;
+        for (let q = 0; q < W; q++) {
+          const x = -7.9 + hres / 2 + q * hres, dx = x - lx, dy = y - H, d2 = dx * dx + dy * dy + z * z;
+          total += evalI(P, Math.atan(dx / z) / DEG, Math.atan(dy / Math.sqrt(dx * dx + z * z)) / DEG) * hres * vres / d2 * HSPR_GLARE_W[wr][Math.floor(q / (W / 8)) % 8];
+        }
+      }
+    }
+    return hsprRound(total, 3);
+  };
+  if (beam === "low") {
+    v.A = range("A"); v.B = range("B"); v.C = range("C");
+    for (const k of ["Doff", "Dnear", "Eoff", "Enear"]) v[k] = width(k);
+    v.Flux = flux([-15, 5]); v.Glare = glare();
+  } else {
+    for (const k of ["PA", "PB", "PC", "PD", "PE"]) v[k] = ray(k);
+    v.Eoff = width("Eoff"); v.Enear = width("Enear"); v.Flux = flux([-5, 10]);
+  }
+  const s = hsprScore(beam, v); s.warn = warn; s.H = H; s.sep = sep;
+  return s;
 }
 
 // ---------- flux on road ----------
@@ -527,6 +696,7 @@ function roadFluxOf(P, rf) {
 function luxOf(P, lamps) { let E = 0; for (const L of lamps) E += evalM(P, L.h, L.v, L.m) * L.f; return E; }
 
 function checkValue(P, c) {
+  if (c.type === "hspr") return hsprValue(P, c);
   if (c.type === "point") return { val: luxOf(P, c.pts[0]) };
   const E = c.pts.map(l => luxOf(P, l));
   if (c.type === "zone") {
@@ -552,7 +722,7 @@ function checkValue(P, c) {
 
 function roadRow(c, cv) {
   const r = row({ id: c.label }, "road", cv.val, c.min, c.max);
-  return Object.assign(r, { check: c, reach: cv.reach, span: cv.span, unit: (c.type === "range" || c.type === "width") ? "m" : "lx" });
+  return Object.assign(r, { check: c, reach: cv.reach, span: cv.span, unit: c.type === "hspr" ? c.unit : (c.type === "range" || c.type === "width") ? "m" : "lx" });
 }
 
 // ---------- evaluation ----------
@@ -1163,9 +1333,10 @@ function defaultConfig(o) {
     const hd = hotDefault(beam, cls, lht);
     targets = Object.assign({ imax: d.imax, flux: d.flux, spreadH: d.sph, spreadV: d.spv, hot: { h: lht ? -hd.h : hd.h, v: hd.v } }, o.targets || {});
   } else targets = Object.assign({ imax: null, flux: null, spreadH: null, spreadV: null }, o.targets || {});
+  const hspr = mode === "hspr" ? { score: o.hsprScore || 3, targets: Object.assign(hsprTargets(beam, o.hsprScore || 3), o.hsprTargets || {}) } : null;
   const rft = o.roadFluxTarget !== undefined ? o.roadFluxTarget : roadFluxDefault(beam, cls);
   return { beam, cls, key: tableKeyFor(beam, cls), sym: !!cut.sym, cut, table: PRESET_TABLES[tableKeyFor(beam, cls)].points, lht, H, sp,
-    checks: normalizeChecks(o.checks || (mode === "param" && isAsymLow(beam, cls) ? PRESET_ROAD.low.checks : [])), evalH: 0, plane: "vertical", targets,
+    checks: normalizeChecks(o.checks || (mode === "param" && isAsymLow(beam, cls) ? PRESET_ROAD.low.checks : [])), evalH: 0, plane: "vertical", targets, hspr,
     roadFlux: { zone: Object.assign({}, ROAD_FLUX_ZONE), target: rft, lamps: "one", height: H, spacing: sp, traffic: lht ? "LHT" : "RHT" },
     shape: mode === "param" ? { smile: o.smile != null ? o.smile : Q_DEFAULT, hot: targets.hot } : null, lane: 3.5, mode, model: o.model || "hybrid",
     aim: o.aim !== undefined ? o.aim : Object.assign({}, AIM_DEFAULT),
@@ -1173,8 +1344,8 @@ function defaultConfig(o) {
 }
 function contextFor(c) {
   return buildContext({ beam: c.beam, cut: c.cut, table: c.table,
-    road: { checks: c.checks, height: c.H, spacing: c.sp, plane: c.plane || "vertical", traffic: c.lht ? "LHT" : "RHT", evalH: c.evalH },
-    useRoad: c.mode === "road", targets: c.targets, roadFlux: c.roadFlux, shape: c.shape, aim: c.aim, imaxCap: physLimits(c.physical).imaxCap });
+    road: { checks: (c.checks || []).concat(c.mode === "hspr" ? hsprChecks(c.beam, c.hspr && c.hspr.targets) : []), height: c.H, spacing: c.sp, plane: c.plane || "vertical", traffic: c.lht ? "LHT" : "RHT", evalH: c.evalH },
+    useRoad: c.mode === "road" || c.mode === "hspr", targets: c.targets, roadFlux: c.roadFlux, shape: c.shape, aim: c.aim, imaxCap: physLimits(c.physical).imaxCap });
 }
 // R149 Annex 5 cut-off scan at horizontal angle h: G = log10 I(b) - log10 I(b + 0.1 deg).
 // Returns the largest G and the cut-off position (inflection of log I, i.e. the steepest point).
@@ -1205,7 +1376,7 @@ function createJob(c) {
   // the cut-off position and sharpness are part of the solve from the start (measured by the R149 scan)
   if (low) ctx.cutCal = { h: -2.5, pos: cut.elbow, G: cut.G || G_DEFAULT };
   // road requirement mode without a flux target: return the lowest-flux beam that passes
-  const prefer = c.mode === "road" && !(c.targets && c.targets.flux) ? "flux" : null;
+  const prefer = (c.mode === "road" || c.mode === "hspr") && !(c.targets && c.targets.flux) ? "flux" : null;
   ctx.prefer = prefer;
   const u0 = hy ? initHybrid(c.beam, cut, c.targets, c.shape) : sq ? initSqrt(c.beam, cut, c.targets, c.shape) : encode(initPhysical(c.beam, c.targets, cut), c.beam);
   const solver = makeLoopSolverS(ctx, u0, { dec, seed: c.seed });
@@ -1218,7 +1389,7 @@ function createJob(c) {
     const sc = low ? cutoffScan(P, scanH) : null, lim = gLimits(cut, c.cls);
     const gBad = sc && (sc.G < lim.min || (lim.max != null && sc.G > lim.max)) ? 1 : 0;
     const nomFail = r.rows.filter(x => x.pass === false).map(x => x.id);
-    const cd = { u: best, cut, ctx, sc, ece: nomFail.length + (r.aimFails ? r.aimFails.filter(id => !nomFail.includes(id)).length : 0) + gBad, miss: c.mode === "road" ? r.roadRows.filter(x => x.pass === false).length : 0,
+    const cd = { u: best, cut, ctx, sc, ece: nomFail.length + (r.aimFails ? r.aimFails.filter(id => !nomFail.includes(id)).length : 0) + gBad, miss: c.mode === "road" || c.mode === "hspr" ? r.roadRows.filter(x => x.pass === false).length : 0,
       err: sc ? Math.abs(sc.G - gTarget) / 0.03 + Math.abs(sc.pos - cut.elbow) / 0.05 : 0 };
     cands.push(cd); return cd;
   };
@@ -1270,6 +1441,7 @@ function createJob(c) {
     }
     if (res.phys) res.phys.imaxRequested = imaxAsked;   // set when the requested Imax was above the aperture limit
     res.aim = c.aim && (c.aim.h > 0 || c.aim.v > 0) ? c.aim : null;
+    if (c.hsprRate !== false) { try { res.hspr = hsprRate(P, c.beam, c.H, c.sp); if (c.mode === "hspr" && c.hspr) { res.hspr.target = c.hspr.score; res.hspr.targets = c.hspr.targets; } } catch (e) { res.hspr = null; } }
     res.aimFailCount = res.aim ? aimAnalysis(P, c.table, c.beam, cut, c.aim, res.imax, res.rows) : 0;
     res.aimPass = res.aimFailCount === 0;
     if (low) {   // cut-off rows, measured as in R149 Annex 5 / 6
@@ -1343,10 +1515,10 @@ function listMisses(c, res, imaxAsked) {
     else if (r.kind === "G") out.push({ what: "Cut-off G", unit: "G", check: true, got: r.val, keys: ["cutG"] });
     else out.push({ what: "ECE " + r.id, unit: "cd", check: true, limit: r.min != null && r.val < r.min ? "min" : "max", asked: r.min != null && r.val < r.min ? r.min : r.max, got: r.val, keys: ["ece|" + r.id, "ece|" + r.id + "|min", "ece|" + r.id + "|max"] });
   }
-  if (c.mode === "road") for (const r of res.roadRows) if (r.pass === false) out.push({ what: "Road check “" + r.id + "”", unit: r.unit, check: true, limit: r.min != null ? "min" : "max", asked: r.min != null ? r.min : r.max, got: r.val, keys: ["road|" + r.id] });
+  if (c.mode === "road" || c.mode === "hspr") for (const r of res.roadRows) if (r.pass === false) out.push({ what: (r.check.type === "hspr" ? "" : "Road check ") + "“" + r.id + "”", unit: r.unit, check: true, limit: r.min != null ? "min" : "max", asked: r.min != null ? r.min : r.max, got: r.val, keys: ["road|" + r.id] });
   if (res.roadFluxTarget && res.roadFlux < res.roadFluxTarget * 0.995) out.push({ what: "Flux on road", unit: "lm", check: true, limit: "min", asked: res.roadFluxTarget, got: res.roadFlux, keys: ["rf"] });
   return out;
 }
 function solveSync(c) { const job = createJob(c); while (!job.run(200)); return job.result(); }
 
-if (typeof module !== "undefined") module.exports = { lobeExtent, normClass, isAsymLow, CLASSES_OF, explainMisses, listMisses, costTerms, PHYS_DEFAULT, physLimits, physReport, AIM_DEFAULT, shiftTable, tableEval, aimAnalysis, cutoffScan, cutBlend, widthForG, gLimits, G_DEFAULT, PARAM_DEFAULTS, Q_DEFAULT, tableKeyFor, paramDefaults, hotDefault, defaultCut, defaultConfig, contextFor, createJob, solveSync, makeGrid, evalGrid, makeSolverS, makeCMA, decodeY, initHybrid, kneePenalty, makeLoopSolverS, decodeS, initSqrt, makeSolverS, sqrtRel, SMILE, applySmile, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };
+if (typeof module !== "undefined") module.exports = { HSPR_CRIT, HSPR_BENCH, HSPR_RANKS, hsprScore, hsprTargets, hsprChecks, hsprRate, hsprRank, lobeExtent, normClass, isAsymLow, CLASSES_OF, explainMisses, listMisses, costTerms, PHYS_DEFAULT, physLimits, physReport, AIM_DEFAULT, shiftTable, tableEval, aimAnalysis, cutoffScan, cutBlend, widthForG, gLimits, G_DEFAULT, PARAM_DEFAULTS, Q_DEFAULT, tableKeyFor, paramDefaults, hotDefault, defaultCut, defaultConfig, contextFor, createJob, solveSync, makeGrid, evalGrid, makeSolverS, makeCMA, decodeY, initHybrid, kneePenalty, makeLoopSolverS, decodeS, initSqrt, makeSolverS, sqrtRel, SMILE, applySmile, ROAD_FLUX_ZONE, roadFluxDefault, compileRoadFlux, roadFluxOf, PRESET_TABLES, PRESET_ROAD, normalizeChecks, toRoadIlluminate, checkValue, roadRow, makeSampler, luxOf, decode, encode, evalI, evaluate, buildContext, initPhysical, makeSolver, cutoffV, maskAt, compileRoad, DEG };

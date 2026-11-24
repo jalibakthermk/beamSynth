@@ -36,7 +36,7 @@ aside{background:var(--surface);border:1px solid var(--line);border-radius:0;min
   position:sticky;top:64px;max-height:calc(100vh - 80px);overflow:hidden}
 .rail-body{position:relative;overflow-y:auto;overscroll-behavior:contain;padding:14px 14px 4px;display:flex;flex-direction:column;gap:14px;min-height:0}
 .rail-foot{border-top:1px solid var(--line);padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--surface)}
-.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--sunk);border-radius:0;padding:3px;gap:3px}
+.seg{display:grid;grid-template-columns:1fr 1fr 1fr;background:var(--sunk);border-radius:0;padding:3px;gap:3px}
 .seg button{font:600 14px var(--f-body);border:0;border-radius:0;padding:8px 6px;background:transparent;color:var(--muted);cursor:pointer}
 .seg button:hover{color:var(--ink)}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
@@ -145,6 +145,11 @@ details.fold:not([open]) .chev{transform:rotate(-45deg)}
 .blk li{padding:10px 14px;border-top:1px solid var(--line-soft);font-size:14.5px}.blk li:first-child{border-top:0}
 .blk li b{font-weight:600}.blk li span{color:var(--muted)}
 .tbl{overflow-x:auto}
+.hs-row{display:grid;grid-template-columns:minmax(0,1fr) 7.5em;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}
+.hs-row small{display:block;color:var(--muted);font-size:12.5px}
+.hs-row .in{display:flex;align-items:center;gap:4px}
+.hs-row input{width:100%;min-width:0}
+.hs-sum td{font-weight:600}
 table{border-collapse:collapse;width:100%;font-size:14px}
 th{font:600 13px var(--f-body);color:var(--muted);text-align:left;padding:8px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
 th.n{text-align:right}
@@ -262,6 +267,7 @@ th.num{font-family:var(--f-body)}
   <div class="seg" role="group" aria-label="Input mode">
     <button id="mRoad" aria-pressed="false">Road requirement</button>
     <button id="mParam" aria-pressed="true">Beam parameters</button>
+    <button id="mHspr" aria-pressed="false">HSPR target</button>
   </div>
 
   <fieldset id="paramPanel">
@@ -287,6 +293,15 @@ th.num{font-family:var(--f-body)}
     </div>
     <p class="note">The lobe limits keep the two light lobes inside a box, measured where each lobe falls to 5 % of its own peak. Without them the foreground lobe can spread to about ±90° and 40° down, which puts a bright patch just in front of the vehicle. At 0.65 m mounting height, 10° D lands about 3.7 m ahead, 6° D about 6.2 m and 4.5° D about 8.3 m. Tight limits can leave flux or V spread short of target; the result tiles mark a lobe held at a limit.</p>
     <p class="note">Q shapes the bottom of the beam, from a “+” shape at 0 to a strong smile at 1. Q does not move the hot spot or change the H spread. Default hot spot: 75R (75L in LHT) for Class C and V, 0.86D on V-V for symmetric classes, H-V for the high beam.</p>
+  </fieldset>
+
+  <fieldset id="hsprPanel" hidden>
+    <div class="row2">
+      <label class="f">Target HSPR score<input id="hsScore" type="number" step="0.1" min="0" max="6" value="3"><small id="hsRank">Excellent</small></label>
+      <div class="f"><span>Criterion targets</span><button class="btn" id="hsFill" type="button">Fill from score</button></div>
+    </div>
+    <div id="hsTargets" class="hs-in"></div>
+    <p class="note">Generates the lowest-flux beam that passes the R149 table and reaches every HSPR criterion target: a minimum for each range, width and flux value, a maximum for glare. The targets that come from a score give every criterion the same points, so a beam that meets them all scores at least that much; edit any of them to trade one criterion against another. Ratings follow GTB Recommended Practice SEP2023 for one function, with the lamp pair at the mounting height and separation set under Vehicle and road. Imax is not limited here; switch on Physical limits to cap it.</p>
   </fieldset>
 
   <fieldset id="roadPanel" hidden>
@@ -443,6 +458,10 @@ th.num{font-family:var(--f-body)}
     <details class="screen fold" id="foldEce" open>
       <summary class="bar"><span class="chev" aria-hidden="true"></span><h2>ECE compliance</h2><span class="cnt" id="ecCount"></span><span class="note" id="tblName"></span></summary>
       <div class="tbl"><table id="ecTbl"></table></div>
+    </details>
+    <details class="screen fold" id="foldHspr" open>
+      <summary class="bar"><span class="chev" aria-hidden="true"></span><h2>HSPR rating</h2><span class="cnt" id="hsCount"></span><span class="note" id="hsNote"></span></summary>
+      <div class="tbl"><table id="hsTbl"></table></div>
     </details>
     <details class="screen fold" id="foldRoad" open>
       <summary class="bar"><span class="chev" aria-hidden="true"></span><h2>Road checks</h2><span class="cnt" id="rdCount"></span><span class="note" id="roadMode"></span></summary>
